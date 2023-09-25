@@ -95,6 +95,13 @@ static void spm_sp_synchronous_exit(sp_context_t *ctx, uint64_t rc)
 		prev[i] = next[i];
 	}
 
+    /* Set SBI Err and Ret */
+    ctx->regs.a0 = SBI_SUCCESS;
+    ctx->regs.a1 = 0;
+
+    /* Set MEPC to next instruction */
+    ctx->regs.mepc = ctx->regs.mepc + 4;
+
     /* Save(secure partition) and restore(SBI caller) CSR context */
 	save_restore_csr_context(ctx);
 
