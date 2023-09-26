@@ -325,4 +325,7 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
 
+/** Initialize the spm mm domain */
+int sbi_domain_spm_mm_init(struct sbi_scratch *scratch, u32 hartid);
+
 #endif

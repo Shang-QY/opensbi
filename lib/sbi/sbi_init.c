@@ -411,6 +411,8 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	count = sbi_scratch_offset_ptr(scratch, init_count_offset);
 	(*count)++;
 
+	sbi_domain_spm_mm_init(scratch, hartid);
+
 	sbi_hsm_hart_start_finish(scratch, hartid);
 }
 
