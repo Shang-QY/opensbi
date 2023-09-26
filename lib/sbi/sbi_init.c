@@ -29,6 +29,7 @@
 #include <sbi/sbi_timer.h>
 #include <sbi/sbi_tlb.h>
 #include <sbi/sbi_version.h>
+#include <sbi_utils/spm/fdt_spm.h>
 
 #define BANNER                                              \
 	"   ____                    _____ ____ _____\n"     \
@@ -405,6 +406,7 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 			   __func__, rc);
 		sbi_hart_hang();
 	}
+    fdt_spm_init();
 
 	wake_coldboot_harts(scratch, hartid);
 
