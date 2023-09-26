@@ -28,6 +28,7 @@
 #include <sbi_utils/ipi/fdt_ipi.h>
 #include <sbi_utils/reset/fdt_reset.h>
 #include <sbi_utils/rpxy/fdt_rpxy.h>
+#include <sbi_utils/spm/fdt_spm.h>
 #include <sbi_utils/serial/semihosting.h>
 
 /* List of platform override modules generated at compile time */
@@ -187,6 +188,8 @@ static int generic_final_init(bool cold_boot)
 		if (rc)
 			return rc;
 	}
+
+	fdt_spm_init();
 
 	return 0;
 }

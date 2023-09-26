@@ -16,7 +16,7 @@ config FDT_RPXY_MBOX
 
 config FDT_RPXY_SPM
 	bool "FDT RPXY spm client driver"
-	# depends on FDT_SPM
+	depends on FDT_SPM
 	default y
 
 endif

@@ -2,15 +2,12 @@
  * SPDX-License-Identifier: BSD-2-Clause
  *
  * Copyright (c) IPADS@SJTU 2023. All rights reserved.
- *
- * Authors:
- *   Qingyu Shang <2931013282@sjtu.edu.cn>
  */
 
 #include <sbi/riscv_asm.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_scratch.h>
-    .align 3
+	.align 3
 	.global spm_secure_partition_enter
 
 	/* ---------------------------------------------------------------------
@@ -23,13 +20,13 @@
 	 */
 spm_secure_partition_enter:
 	/* Make space for the registers that we're going to save */
-    REG_S   sp, 0(a1)
-    add	sp, sp, -(SBI_TRAP_REGS_SIZE)
+	REG_S   sp, 0(a1)
+	add	sp, sp, -(SBI_TRAP_REGS_SIZE)
 
 	/* Save callee-saved registers on to the stack */
 	REG_L	gp, SBI_TRAP_REGS_OFFSET(gp)(sp)
 	REG_L	tp, SBI_TRAP_REGS_OFFSET(tp)(sp)
-    REG_S	s0, SBI_TRAP_REGS_OFFSET(s0)(sp)
+	REG_S	s0, SBI_TRAP_REGS_OFFSET(s0)(sp)
 	REG_S	s1, SBI_TRAP_REGS_OFFSET(s1)(sp)
 	REG_S	s2, SBI_TRAP_REGS_OFFSET(s2)(sp)
 	REG_S	s3, SBI_TRAP_REGS_OFFSET(s3)(sp)
@@ -40,27 +37,27 @@ spm_secure_partition_enter:
 	REG_S	s8, SBI_TRAP_REGS_OFFSET(s8)(sp)
 	REG_S	s9, SBI_TRAP_REGS_OFFSET(s9)(sp)
 	REG_S	s10, SBI_TRAP_REGS_OFFSET(s10)(sp)
-	REG_S	s11, SBI_TRAP_REGS_OFFSET(s11)(sp)    
+	REG_S	s11, SBI_TRAP_REGS_OFFSET(s11)(sp)
 
-    /* Save MEPC and MSTATUS CSRs */
+	/* Save MEPC and MSTATUS CSRs */
 	csrr	t0, CSR_MEPC
 	REG_S	t0, SBI_TRAP_REGS_OFFSET(mepc)(sp)
 	csrr	t0, CSR_MSTATUS
 	REG_S	t0, SBI_TRAP_REGS_OFFSET(mstatus)(sp)
 
-    /* Save Return address register on to the stack */
-    REG_S	ra, SBI_TRAP_REGS_OFFSET(ra)(sp)
+	/* Save Return address register on to the stack */
+	REG_S	ra, SBI_TRAP_REGS_OFFSET(ra)(sp)
 
-    /* Save original MSCRATCH register on to the stack (use `sp` field) */
-    /* Swap TP and MSCRATCH */
+	/* Save original MSCRATCH register on to the stack (use `sp` field) */
+	/* Swap TP and MSCRATCH */
 	csrrw	tp, CSR_MSCRATCH, tp
-    REG_S	tp, SBI_TRAP_REGS_OFFSET(sp)(sp)
+	REG_S	tp, SBI_TRAP_REGS_OFFSET(sp)(sp)
 
-    /* Set MSCRATCH register to current runtime stack */
-    /* Make space for the struct sbi_scratch that will be used in next _trap_handler */
-    li	a5, SBI_SCRATCH_SIZE
-    sub	tp, sp, a5
-    /* Swap TP and MSCRATCH */
+	/* Set MSCRATCH register to current runtime stack */
+	/* Make space for the struct sbi_scratch that will be used in next _trap_handler */
+	li	a5, SBI_SCRATCH_SIZE
+	sub	tp, sp, a5
+	/* Swap TP and MSCRATCH */
 	csrrw	tp, CSR_MSCRATCH, tp
 
 	/* ---------------------------------------------------------------------
@@ -71,8 +68,8 @@ spm_secure_partition_enter:
 	 */
 	call	_trap_exit
 
-    .align 3
-    .global spm_secure_partition_exit
+	.align 3
+	.global spm_secure_partition_exit
 	/* ---------------------------------------------------------------------
 	 * This function is called with 'x0' pointing to a C runtime context
 	 * saved in spm_secure_partition_enter().
@@ -86,9 +83,9 @@ spm_secure_partition_exit:
 	/* Restore the previous stack */
 	add	sp, a0, 0
 
-    /* Restore original MSCRATCH register from the stack (use `sp` field) */
-    REG_L	tp, (SBI_TRAP_REGS_OFFSET(sp) - SBI_TRAP_REGS_SIZE)(sp)
-    /* Swap TP and MSCRATCH */
+	/* Restore original MSCRATCH register from the stack (use `sp` field) */
+	REG_L	tp, (SBI_TRAP_REGS_OFFSET(sp) - SBI_TRAP_REGS_SIZE)(sp)
+	/* Swap TP and MSCRATCH */
 	csrrw	tp, CSR_MSCRATCH, tp
 
 	/* Restore callee-saved registers from the stack */
@@ -107,7 +104,7 @@ spm_secure_partition_exit:
 	REG_L	s10, (SBI_TRAP_REGS_OFFSET(s10) - SBI_TRAP_REGS_SIZE)(sp)
 	REG_L	s11, (SBI_TRAP_REGS_OFFSET(s11) - SBI_TRAP_REGS_SIZE)(sp)
 
-    /* Restore MEPC and MSTATUS CSRs */
+	/* Restore MEPC and MSTATUS CSRs */
 	REG_L	t0, (SBI_TRAP_REGS_OFFSET(mepc) - SBI_TRAP_REGS_SIZE)(sp)
 	csrw	CSR_MEPC, t0
 	REG_L	t0, (SBI_TRAP_REGS_OFFSET(mstatus) - SBI_TRAP_REGS_SIZE)(sp)
