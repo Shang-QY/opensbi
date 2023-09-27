@@ -4,7 +4,7 @@
  * Copyright (c) IPADS@SJTU 2023. All rights reserved.
  */
 
-#include <sbi/sbi_trap.h>
+#include <sbi/sbi_error.h>
 #include <sbi/riscv_asm.h>
 #include <sbi_utils/spm/spm.h>
 

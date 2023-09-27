@@ -7,8 +7,13 @@
  *   Qingyu Shang <2931013282@sjtu.edu.cn>
  */
 
+#include <sbi/riscv_asm.h>
+#include <sbi/sbi_bitops.h>
+#include <sbi_utils/fdt/fdt_helper.h>
 #include <sbi_utils/spm/fdt_spm.h>
 #include <sbi_utils/spm/spm.h>
+#include <sbi_utils/mailbox/rpmi_msgprot.h>
+#include <sbi/sbi_console.h>
 
 #define MM_VERSION_MAJOR        1
 #define MM_VERSION_MAJOR_SHIFT  16
@@ -152,9 +157,9 @@ static const struct fdt_match fdt_spm_mm_match[] = {
 	{ },
 };
 
-struct spm_chan spm_mm_chan = {
+static const struct spm_chan spm_mm_chan = {
     .spm_message_handler = spm_message_handler_mm,
-}
+};
 
 struct fdt_spm fdt_spm_mm = {
 	.match_table = fdt_spm_mm_match,

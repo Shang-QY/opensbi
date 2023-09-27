@@ -7,6 +7,8 @@
 #ifndef __SPM_H__
 #define __SPM_H__
 
+#include <sbi/sbi_trap.h>
+
 /** Representation of Secure Partition context */
 struct sp_context {
 	/** secure context for all general registers */

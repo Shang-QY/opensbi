@@ -16,11 +16,11 @@ struct spm_chan {
 			void *tx, u32 tx_len,
 			void *rx, u32 rx_len,
 			unsigned long *ack_len);
-}
+};
 
 struct fdt_spm {
 	const struct fdt_match *match_table;
-	int (*init)(void *fdt, int nodeoff, const struct fdt_match *match);
+	int (*init)(void);
     struct spm_chan chan;
 };
 

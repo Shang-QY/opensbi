@@ -29,7 +29,7 @@ int fdt_spm_init(void)
 			if (drv->init == NULL)
 				return SBI_EFAIL;
 
-			rc = drv->init(fdt, noff, match);
+			rc = drv->init();
 			if (rc == SBI_ENODEV)
 				continue;
 			if (rc)
@@ -49,7 +49,7 @@ int fdt_spm_init(void)
 
 int fdt_spm_request_chan(void *fdt, int nodeoff, struct spm_chan *out_chan)
 {
-	int pos, rc;
+	int pos;
 	struct fdt_spm *drv;
 
 	for (pos = 0; pos < fdt_spm_service_groups_size; pos++) {
