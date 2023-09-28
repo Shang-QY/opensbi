@@ -21,7 +21,7 @@ struct rpxy_spm_data {
 
 struct rpxy_spm {
 	struct sbi_rpxy_service_group group;
-    struct spm_chan chan;
+	struct spm_chan chan;
 };
 
 static int rpxy_spm_send_message(struct sbi_rpxy_service_group *grp,
@@ -31,7 +31,6 @@ static int rpxy_spm_send_message(struct sbi_rpxy_service_group *grp,
 				  unsigned long *ack_len)
 {
 	int ret;
-	sbi_printf("#### rpxy_spm_send_message %d %p %d %p %d %p ####\n", srv->id, tx, tx_len, rx, rx_len, ack_len);
 	struct rpxy_spm *rspm = container_of(grp, struct rpxy_spm, group);
 
 	ret = rspm->chan.spm_message_handler(srv->id, tx, tx_len, rx, rx_len, ack_len);
@@ -44,9 +43,8 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 {
 	int rc;
 	struct rpxy_spm *rspm;
-    struct spm_chan chan;
+	struct spm_chan chan;
 	const struct rpxy_spm_data *data = match->data;
-	sbi_printf("rpxy_spm_init\n");
 
 	/* Allocate context for RPXY mbox client */
 	rspm = sbi_zalloc(sizeof(*rspm));
@@ -67,7 +65,7 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 	rspm->group.num_services = data->num_services;
 	rspm->group.services = data->services;
 	rspm->group.send_message = rpxy_spm_send_message;
-    rspm->chan = chan;
+	rspm->chan = chan;
 
 	/* Register RPXY service group */
 	rc = sbi_rpxy_register_service_group(&rspm->group);
@@ -75,7 +73,6 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 		sbi_free(rspm);
 		return rc;
 	}
-	sbi_printf("rpxy_spm mm_group registered\n");
 
 	return 0;
 }

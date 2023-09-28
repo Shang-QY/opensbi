@@ -5,7 +5,7 @@ menu "Secure Partition Support"
 config FDT_SPM
 	bool "FDT based SPM ServiceGroups"
 	depends on FDT
-    select SPM
+	select SPM
 	default n
 
 if FDT_SPM

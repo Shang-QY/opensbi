@@ -21,7 +21,7 @@ struct spm_chan {
 struct fdt_spm {
 	const struct fdt_match *match_table;
 	int (*init)(void);
-    struct spm_chan chan;
+	struct spm_chan chan;
 };
 
 /** Request the message handler corresponding to an SPM service group instance */

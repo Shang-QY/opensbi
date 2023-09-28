@@ -2,9 +2,6 @@
  * SPDX-License-Identifier: BSD-2-Clause
  *
  * Copyright (c) IPADS@SJTU 2023. All rights reserved.
- *
- * Authors:
- *   Qingyu Shang <2931013282@sjtu.edu.cn>
  */
 
 #include <sbi/riscv_asm.h>
@@ -130,7 +127,6 @@ int spm_mm_init(void)
 
 	rc = spm_sp_synchronous_entry(&mm_context);
 
-	sbi_printf("spm_mm_init finish, retval: %d\n", rc);
 	return rc;
 }
 
@@ -139,14 +135,12 @@ static int spm_message_handler_mm(int srv_id,
 				  void *rx, u32 rx_len,
 				  unsigned long *ack_len)
 {
-	sbi_printf("#### spm_mm_message_handler %d %p %d %p %d %p ####\n", srv_id, tx, tx_len, rx, rx_len, ack_len);
 	if (RPMI_MM_SRV_MM_VERSION == srv_id) {
-		*((u32 *)rx) = MM_VERSION_COMPILED;
+		*((int32_t *)rx) = 0;
+		*((uint32_t *)(rx + sizeof(uint32_t))) = MM_VERSION_COMPILED;
 	} else if (RPMI_MM_SRV_MM_COMMUNICATE == srv_id) {
-		sbi_printf("#### rpxy_spm_send_message RPMI_MM_SRV_COMMUNICATE %d %p %d %p %d %p ####\n", srv_id, tx, tx_len, rx, rx_len, ack_len);
 		spm_sp_synchronous_entry(&mm_context);
 	} else if (RPMI_MM_SRV_MM_COMPLETE == srv_id) {
-		sbi_printf("####  rpxy_spm_send_message RPMI_MM_SRV_COMPLETE %d %p %d %p %d %p ####\n", srv_id, tx, tx_len, rx, rx_len, ack_len);
 		spm_sp_synchronous_exit(&mm_context, 0);
 	}
 	return 0;
@@ -158,11 +152,11 @@ static const struct fdt_match fdt_spm_mm_match[] = {
 };
 
 static const struct spm_chan spm_mm_chan = {
-    .spm_message_handler = spm_message_handler_mm,
+	.spm_message_handler = spm_message_handler_mm,
 };
 
 struct fdt_spm fdt_spm_mm = {
 	.match_table = fdt_spm_mm_match,
 	.init = spm_mm_init,
-    .chan = spm_mm_chan
+	.chan = spm_mm_chan
 };

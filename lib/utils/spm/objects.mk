@@ -7,7 +7,7 @@
 libsbiutils-objs-$(CONFIG_FDT_SPM) += spm/fdt_spm.o
 libsbiutils-objs-$(CONFIG_FDT_SPM) += spm/fdt_spm_service_groups.o
 
-carray-fdt_cppc_drivers-$(CONFIG_FDT_SPM_MM) += fdt_spm_mm
+carray-fdt_spm_service_groups-$(CONFIG_FDT_SPM_MM) += fdt_spm_mm
 libsbiutils-objs-$(CONFIG_FDT_SPM_MM) += spm/fdt_spm_mm.o
 
 libsbiutils-objs-$(CONFIG_SPM) += spm/spm.o
