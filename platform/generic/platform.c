@@ -28,7 +28,6 @@
 #include <sbi_utils/ipi/fdt_ipi.h>
 #include <sbi_utils/reset/fdt_reset.h>
 #include <sbi_utils/rpxy/fdt_rpxy.h>
-#include <sbi_utils/spm/fdt_spm.h>
 #include <sbi_utils/serial/semihosting.h>
 
 /* List of platform override modules generated at compile time */
@@ -189,8 +188,6 @@ static int generic_final_init(bool cold_boot)
 			return rc;
 	}
 
-	fdt_spm_init();
-
 	return 0;
 }
 
@@ -272,6 +269,13 @@ static u64 generic_tlbr_flush_limit(void)
 	return SBI_PLATFORM_TLB_RANGE_FLUSH_LIMIT_DEFAULT;
 }
 
+static u32 generic_tlb_num_entries(void)
+{
+	if (generic_plat && generic_plat->tlb_num_entries)
+		return generic_plat->tlb_num_entries(generic_plat_match);
+	return SBI_PLATFORM_TLB_FIFO_NUM_ENTRIES;
+}
+
 static int generic_pmu_init(void)
 {
 	return fdt_pmu_setup(fdt_get_address());
@@ -324,6 +328,7 @@ const struct sbi_platform_operations platform_ops = {
 	.pmu_init		= generic_pmu_init,
 	.pmu_xlate_to_mhpmevent = generic_pmu_xlate_to_mhpmevent,
 	.get_tlbr_flush_limit	= generic_tlbr_flush_limit,
+	.get_tlb_num_entries	= generic_tlb_num_entries,
 	.timer_init		= fdt_timer_init,
 	.timer_exit		= fdt_timer_exit,
 	.rpxy_init		= fdt_rpxy_init,

@@ -41,6 +41,7 @@
 #define SBI_PLATFORM_HART_INDEX2ID_OFFSET (0x60 + (__SIZEOF_POINTER__ * 2))
 
 #define SBI_PLATFORM_TLB_RANGE_FLUSH_LIMIT_DEFAULT		(1UL << 12)
+#define SBI_PLATFORM_TLB_FIFO_NUM_ENTRIES				8
 
 #ifndef __ASSEMBLER__
 
@@ -124,6 +125,9 @@ struct sbi_platform_operations {
 
 	/** Get tlb flush limit value **/
 	u64 (*get_tlbr_flush_limit)(void);
+
+	/** Get tlb fifo num entries*/
+	u32 (*get_tlb_num_entries)(void);
 
 	/** Initialize platform timer for current HART */
 	int (*timer_init)(bool cold_boot);
@@ -262,16 +266,6 @@ _Static_assert(
 	((__p)->features & SBI_PLATFORM_HAS_MFAULTS_DELEGATION)
 
 /**
- * Get HART index for the given HART
- *
- * @param plat pointer to struct sbi_platform
- * @param hartid HART ID
- *
- * @return 0 <= value < hart_count for valid HART otherwise -1U
- */
-u32 sbi_platform_hart_index(const struct sbi_platform *plat, u32 hartid);
-
-/**
  * Get the platform features in string format
  *
  * @param plat pointer to struct sbi_platform
@@ -329,6 +323,20 @@ static inline u64 sbi_platform_tlbr_flush_limit(const struct sbi_platform *plat)
 }
 
 /**
+ * Get platform specific tlb fifo num entries.
+ *
+ * @param plat pointer to struct sbi_platform
+ *
+ * @return number of tlb fifo entries
+*/
+static inline u32 sbi_platform_tlb_fifo_num_entries(const struct sbi_platform *plat)
+{
+	if (plat && sbi_platform_ops(plat)->get_tlb_num_entries)
+		return sbi_platform_ops(plat)->get_tlb_num_entries();
+	return SBI_PLATFORM_TLB_FIFO_NUM_ENTRIES;
+}
+
+/**
  * Get total number of HARTs supported by the platform
  *
  * @param plat pointer to struct sbi_platform
@@ -354,24 +362,6 @@ static inline u32 sbi_platform_hart_stack_size(const struct sbi_platform *plat)
 	if (plat)
 		return plat->hart_stack_size;
 	return 0;
-}
-
-/**
- * Check whether given HART is invalid
- *
- * @param plat pointer to struct sbi_platform
- * @param hartid HART ID
- *
- * @return true if HART is invalid and false otherwise
- */
-static inline bool sbi_platform_hart_invalid(const struct sbi_platform *plat,
-					     u32 hartid)
-{
-	if (!plat)
-		return true;
-	if (plat->hart_count <= sbi_platform_hart_index(plat, hartid))
-		return true;
-	return false;
 }
 
 /**

@@ -207,7 +207,7 @@ static void wait_for_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	spin_lock(&coldboot_lock);
 
 	/* Mark current HART as waiting */
-	sbi_hartmask_set_hart(hartid, &coldboot_wait_hmask);
+	sbi_hartmask_set_hartid(hartid, &coldboot_wait_hmask);
 
 	/* Release coldboot lock */
 	spin_unlock(&coldboot_lock);
@@ -224,7 +224,7 @@ static void wait_for_coldboot(struct sbi_scratch *scratch, u32 hartid)
 	spin_lock(&coldboot_lock);
 
 	/* Unmark current HART as waiting */
-	sbi_hartmask_clear_hart(hartid, &coldboot_wait_hmask);
+	sbi_hartmask_clear_hartid(hartid, &coldboot_wait_hmask);
 
 	/* Release coldboot lock */
 	spin_unlock(&coldboot_lock);
@@ -244,6 +244,8 @@ static void wait_for_coldboot(struct sbi_scratch *scratch, u32 hartid)
 
 static void wake_coldboot_harts(struct sbi_scratch *scratch, u32 hartid)
 {
+	u32 i, hartindex = sbi_hartid_to_hartindex(hartid);
+
 	/* Mark coldboot done */
 	__smp_store_release(&coldboot_done, 1);
 
@@ -251,10 +253,10 @@ static void wake_coldboot_harts(struct sbi_scratch *scratch, u32 hartid)
 	spin_lock(&coldboot_lock);
 
 	/* Send an IPI to all HARTs waiting for coldboot */
-	for (u32 i = 0; i <= sbi_scratch_last_hartid(); i++) {
-		if ((i != hartid) &&
-		    sbi_hartmask_test_hart(i, &coldboot_wait_hmask))
-			sbi_ipi_raw_send(i);
+	sbi_hartmask_for_each_hartindex(i, &coldboot_wait_hmask) {
+		if (i == hartindex)
+			continue;
+		sbi_ipi_raw_send(i);
 	}
 
 	/* Release coldboot lock */
@@ -346,6 +348,12 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 		sbi_hart_hang();
 	}
 
+	rc = sbi_rpxy_init(scratch);
+	if (rc) {
+		sbi_printf("%s: rpxy init failed (error %d)\n", __func__, rc);
+		sbi_hart_hang();
+	}
+
 	/*
 	 * Note: Finalize domains after HSM initialization so that we
 	 * can startup non-root domains.
@@ -404,12 +412,6 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 
 	count = sbi_scratch_offset_ptr(scratch, init_count_offset);
 	(*count)++;
-
-	rc = sbi_rpxy_init(scratch);
-	if (rc) {
-		sbi_printf("%s: rpxy init failed (error %d)\n", __func__, rc);
-		sbi_hart_hang();
-	}
 
 	sbi_hsm_hart_start_finish(scratch, hartid);
 }
@@ -508,7 +510,7 @@ static void __noreturn init_warmboot(struct sbi_scratch *scratch, u32 hartid)
 	if (hstate == SBI_HSM_STATE_SUSPENDED) {
 		init_warm_resume(scratch, hartid);
 	} else {
-		sbi_ipi_raw_clear(hartid);
+		sbi_ipi_raw_clear(sbi_hartid_to_hartindex(hartid));
 		init_warm_startup(scratch, hartid);
 	}
 }
@@ -529,13 +531,19 @@ static atomic_t coldboot_lottery = ATOMIC_INITIALIZER(0);
  */
 void __noreturn sbi_init(struct sbi_scratch *scratch)
 {
+	u32 i, h;
+	bool hartid_valid		= false;
 	bool next_mode_supported	= false;
 	bool coldboot			= false;
 	u32 hartid			= current_hartid();
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
-	if ((SBI_HARTMASK_MAX_BITS <= hartid) ||
-	    sbi_platform_hart_invalid(plat, hartid))
+	for (i = 0; i < plat->hart_count; i++) {
+		h = (plat->hart_index2id) ? plat->hart_index2id[i] : i;
+		if (h == hartid)
+			hartid_valid = true;
+	}
+	if (!hartid_valid)
 		sbi_hart_hang();
 
 	switch (scratch->next_mode) {
@@ -632,7 +640,7 @@ void __noreturn sbi_exit(struct sbi_scratch *scratch)
 	u32 hartid			= current_hartid();
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
-	if (sbi_platform_hart_invalid(plat, hartid))
+	if (!sbi_hartid_valid(hartid))
 		sbi_hart_hang();
 
 	sbi_platform_early_exit(plat);

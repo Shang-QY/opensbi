@@ -14,6 +14,7 @@
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_fifo.h>
 #include <sbi/sbi_hart.h>
+#include <sbi/sbi_heap.h>
 #include <sbi/sbi_ipi.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_tlb.h>
@@ -213,14 +214,14 @@ static void tlb_pmu_incr_fw_ctr(struct sbi_tlb_info *data)
 
 static void tlb_entry_process(struct sbi_tlb_info *tinfo)
 {
-	u32 rhartid;
+	u32 rindex;
 	struct sbi_scratch *rscratch = NULL;
 	atomic_t *rtlb_sync = NULL;
 
 	tinfo->local_fn(tinfo);
 
-	sbi_hartmask_for_each_hart(rhartid, &tinfo->smask) {
-		rscratch = sbi_hartid_to_scratch(rhartid);
+	sbi_hartmask_for_each_hartindex(rindex, &tinfo->smask) {
+		rscratch = sbi_hartindex_to_scratch(rindex);
 		if (!rscratch)
 			continue;
 
@@ -333,7 +334,7 @@ static int tlb_update_cb(void *in, void *data)
 
 static int tlb_update(struct sbi_scratch *scratch,
 			  struct sbi_scratch *remote_scratch,
-			  u32 remote_hartid, void *data)
+			  u32 remote_hartindex, void *data)
 {
 	int ret;
 	atomic_t *tlb_sync;
@@ -355,7 +356,7 @@ static int tlb_update(struct sbi_scratch *scratch,
 	 * If the request is to queue a tlb flush entry for itself
 	 * then just do a local flush and return;
 	 */
-	if (remote_hartid == curr_hartid) {
+	if (sbi_hartindex_to_hartid(remote_hartindex) == curr_hartid) {
 		tinfo->local_fn(tinfo);
 		return SBI_IPI_UPDATE_BREAK;
 	}
@@ -374,8 +375,8 @@ static int tlb_update(struct sbi_scratch *scratch,
 		 * this properly.
 		 */
 		tlb_process_once(scratch);
-		sbi_dprintf("hart%d: hart%d tlb fifo full\n",
-			    curr_hartid, remote_hartid);
+		sbi_dprintf("hart%d: hart%d tlb fifo full\n", curr_hartid,
+			    sbi_hartindex_to_hartid(remote_hartindex));
 		return SBI_IPI_UPDATE_RETRY;
 	}
 
@@ -421,8 +422,7 @@ int sbi_tlb_init(struct sbi_scratch *scratch, bool cold_boot)
 			sbi_scratch_free_offset(tlb_sync_off);
 			return SBI_ENOMEM;
 		}
-		tlb_fifo_mem_off = sbi_scratch_alloc_offset(
-				SBI_TLB_FIFO_NUM_ENTRIES * SBI_TLB_INFO_SIZE);
+		tlb_fifo_mem_off = sbi_scratch_alloc_offset(sizeof(tlb_mem));
 		if (!tlb_fifo_mem_off) {
 			sbi_scratch_free_offset(tlb_fifo_off);
 			sbi_scratch_free_offset(tlb_sync_off);
@@ -448,12 +448,19 @@ int sbi_tlb_init(struct sbi_scratch *scratch, bool cold_boot)
 
 	tlb_sync = sbi_scratch_offset_ptr(scratch, tlb_sync_off);
 	tlb_q = sbi_scratch_offset_ptr(scratch, tlb_fifo_off);
-	tlb_mem = sbi_scratch_offset_ptr(scratch, tlb_fifo_mem_off);
+	tlb_mem = sbi_scratch_read_type(scratch, void *, tlb_fifo_mem_off);
+	if (!tlb_mem) {
+		tlb_mem = sbi_malloc(
+				sbi_platform_tlb_fifo_num_entries(plat) * SBI_TLB_INFO_SIZE);
+		if (!tlb_mem)
+			return SBI_ENOMEM;
+		sbi_scratch_write_type(scratch, void *, tlb_fifo_mem_off, tlb_mem);
+	}
 
 	ATOMIC_INIT(tlb_sync, 0);
 
 	sbi_fifo_init(tlb_q, tlb_mem,
-		      SBI_TLB_FIFO_NUM_ENTRIES, SBI_TLB_INFO_SIZE);
+		      sbi_platform_tlb_fifo_num_entries(plat), SBI_TLB_INFO_SIZE);
 
 	return 0;
 }
