@@ -52,6 +52,13 @@ struct sbi_rpxy_service_group {
 				       void *output_data,
 				       u32 output_data_len,
 				       unsigned long *events_len);
+	
+	/** 
+	 * Initialise this service group after Ecall initialization
+	 * NOTE: If one need no second phase initialization,
+	 *   leave this function pointer equal to NULL
+	 */
+	int32_t (*later_init)(struct sbi_rpxy_service_group *grp);
 };
 
 /** Check if some RPMI proxy service group is available */
@@ -83,5 +90,8 @@ int sbi_rpxy_register_service_group(struct sbi_rpxy_service_group *grp);
 
 /** Initialize RPMI proxy subsystem */
 int sbi_rpxy_init(struct sbi_scratch *scratch);
+
+/** Initialize RPMI service groups which need a second phase initialization */
+int sbi_rpxy_final_init(struct sbi_scratch *scratch);
 
 #endif
