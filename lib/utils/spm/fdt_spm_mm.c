@@ -95,7 +95,8 @@ void set_mm_boot_args(struct sbi_trap_regs *regs)
 /*
  * StandaloneMm early initialization.
  */
-int spm_mm_init(void)
+int spm_mm_init(void *fdt, int nodeoff,
+			  const struct fdt_match *match)
 {
 	int rc;
 
@@ -151,12 +152,8 @@ static const struct fdt_match fdt_spm_mm_match[] = {
 	{ },
 };
 
-static const struct spm_chan spm_mm_chan = {
-	.spm_message_handler = spm_message_handler_mm,
-};
-
 struct fdt_spm fdt_spm_mm = {
 	.match_table = fdt_spm_mm_match,
 	.init = spm_mm_init,
-	.chan = spm_mm_chan
+	.spm_message_handler = spm_message_handler_mm,
 };
