@@ -8,6 +8,7 @@
 #define __SPM_H__
 
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_domain.h>
 
 /** Representation of Secure Partition context */
 struct sp_context {
@@ -23,6 +24,8 @@ struct sp_context {
 	 * returning from a synchronous entry into Secure Partition.
 	 */
 	uintptr_t c_rt_ctx;
+	/** OpenSBI domain in which Secure Partition runs */
+	struct sbi_domain *dom;
 };
 
 /**
@@ -41,5 +44,14 @@ uint64_t spm_sp_synchronous_entry(struct sp_context *ctx);
  * @param rc the return value for the original entry call
  */
 void spm_sp_synchronous_exit(struct sp_context *ctx, uint64_t rc);
+
+/**
+ * This function used to get the OpenSBI domain in which Secure Partition runs
+ * @param fdt pointer to FDT
+ * @param nodeoff the current Secure Partition node offset in FDT
+ * @param output_domain output field to get the matching domain structure
+ * @return 0 on success and negative error code if no domain matches
+ */
+int spm_sp_find_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain);
 
 #endif

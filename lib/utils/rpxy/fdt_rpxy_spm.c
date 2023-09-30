@@ -19,16 +19,9 @@ struct rpxy_spm_data {
 	struct sbi_rpxy_service *services;
 };
 
-struct rpxy_spm_later_init_info {
-	void *fdt;
-	int nodeoff;
-	const struct fdt_match *match;
-};
-
 struct rpxy_spm {
 	struct sbi_rpxy_service_group group;
 	struct fdt_spm *manager;
-	struct rpxy_spm_later_init_info init_info;
 };
 
 static int rpxy_spm_send_message(struct sbi_rpxy_service_group *grp,
@@ -50,7 +43,7 @@ static int rpxy_spm_later_init(struct sbi_rpxy_service_group *grp)
 	int ret;
 	struct rpxy_spm *rspm = container_of(grp, struct rpxy_spm, group);
 
-	ret = rspm->manager->init(rspm->init_info.fdt, rspm->init_info.nodeoff, rspm->init_info.match);
+	ret = rspm->manager->init();
 
 	return ret;
 }
@@ -75,6 +68,13 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 		return 0;
 	}
 
+	/* Setup SPM service group manager, initialize SP context */
+	rc = manager->setup(fdt, nodeoff, match);   /* first phase init */
+	if (rc) {
+		sbi_free(rspm);
+		return 0;
+	}
+
 	/* Setup RPXY spm client */
 	rspm->group.transport_id = 0;
 	rspm->group.service_group_id = data->service_group_id;
@@ -82,11 +82,8 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 	rspm->group.num_services = data->num_services;
 	rspm->group.services = data->services;
 	rspm->group.send_message = rpxy_spm_send_message;
-	rspm->group.later_init = rpxy_spm_later_init;
+	rspm->group.later_init = rpxy_spm_later_init;		/* second phase init */
 	rspm->manager = manager;
-	rspm->init_info.fdt = fdt;
-	rspm->init_info.nodeoff = nodeoff;
-	rspm->init_info.match = match;
 
 	/* Register RPXY service group */
 	rc = sbi_rpxy_register_service_group(&rspm->group);
