@@ -11,8 +11,9 @@
 
 struct fdt_spm {
 	const struct fdt_match *match_table;
-	int (*init)(void *fdt, int nodeoff,
+	int (*setup)(void *fdt, int nodeoff,
 			const struct fdt_match *match);
+	int (*init)(void);
 	int (*spm_message_handler)(int srv_id,
 			void *tx, u32 tx_len,
 			void *rx, u32 rx_len,

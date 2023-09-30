@@ -62,10 +62,9 @@ struct efi_secure_shared_buffer {
 	struct efi_secure_partition_cpu_info mm_cpu_info[1];
 };
 
-void set_mm_boot_args(struct sbi_trap_regs *regs)
+void set_mm_boot_arg1(uint64_t a1)
 {
-	/* Fix me: where to setup boot_info for secure partition? */
-	struct efi_secure_shared_buffer *mm_shared_buffer = (struct efi_secure_shared_buffer *)0x80B00000;
+	struct efi_secure_shared_buffer *mm_shared_buffer = (struct efi_secure_shared_buffer *)a1;
 
 	mm_shared_buffer->mm_payload_boot_info.header.version = 0x01;
 	mm_shared_buffer->mm_payload_boot_info.sp_mem_base	= 0x80C00000;
@@ -87,16 +86,52 @@ void set_mm_boot_args(struct sbi_trap_regs *regs)
 	mm_shared_buffer->mm_cpu_info[0].linear_id		 = 0;
 	mm_shared_buffer->mm_cpu_info[0].flags		 = 0;
 	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
-
-	regs->a0 = current_hartid();
-	regs->a1 = (uintptr_t)&mm_shared_buffer->mm_payload_boot_info;
 }
 
 /*
- * StandaloneMm early initialization.
+ * Initialize StandaloneMm SP context.
  */
-int spm_mm_init(void *fdt, int nodeoff,
+int spm_mm_setup(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
+{
+	int rc;
+	unsigned long val;
+	struct sbi_domain *dom;
+
+	rc = spm_sp_find_domain(fdt, nodeoff, &dom);
+	if (rc) {
+		return SBI_EINVAL;
+	}
+
+	val = csr_read(CSR_MSTATUS);
+	val = INSERT_FIELD(val, MSTATUS_MPP, PRV_S);
+	val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+
+	/* Setup secure M-mode CSR context */
+	mm_context.regs.mstatus = val;
+	mm_context.regs.mepc = dom->next_addr;
+
+	/* Setup secure S-mode CSR context */
+	mm_context.csr_stvec = dom->next_addr;
+	mm_context.csr_sscratch = 0;
+	mm_context.csr_sie = 0;
+	mm_context.csr_satp = 0;
+
+	/* Setup boot arguments */
+	mm_context.regs.a0 = current_hartid();
+	mm_context.regs.a1 = dom->next_arg1;
+	set_mm_boot_arg1(dom->next_arg1);
+
+	/* Setup binding OpenSBI domain */
+	mm_context.dom = dom;
+
+	return 0;
+}
+
+/*
+ * Jump to StandaloneMm SP for the first time.
+ */
+int spm_mm_init(void)
 {
 	int rc;
 
@@ -105,24 +140,6 @@ int spm_mm_init(void *fdt, int nodeoff,
 	csr_read_clear(CSR_MIP, MIP_STIP);
 	csr_read_clear(CSR_MIP, MIP_SSIP);
 	csr_read_clear(CSR_MIP, MIP_SEIP);
-
-	unsigned long val = csr_read(CSR_MSTATUS);
-	val = INSERT_FIELD(val, MSTATUS_MPP, PRV_S);
-	val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
-
-	/* init secure context */
-	mm_context.regs.mstatus = val;
-	/* Fix me: entry point value in domain information of spm_mm */
-	mm_context.regs.mepc = 0x80C00000;
-
-	/* set boot arguments */
-	set_mm_boot_args(&mm_context.regs);
-
-	/* init secure CSR context */
-	mm_context.csr_stvec = 0x80C00000;
-	mm_context.csr_sscratch = 0;
-	mm_context.csr_sie = 0;
-	mm_context.csr_satp = 0;
 
 	__asm__ __volatile__("sfence.vma" : : : "memory");
 
@@ -154,6 +171,7 @@ static const struct fdt_match fdt_spm_mm_match[] = {
 
 struct fdt_spm fdt_spm_mm = {
 	.match_table = fdt_spm_mm_match,
+	.setup = spm_mm_setup,
 	.init = spm_mm_init,
 	.spm_message_handler = spm_message_handler_mm,
 };
