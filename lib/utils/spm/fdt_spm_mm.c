@@ -11,6 +11,7 @@
 #include <sbi_utils/spm/spm.h>
 #include <sbi_utils/mailbox/rpmi_msgprot.h>
 #include <sbi/sbi_console.h>
+#include <sbi/sbi_string.h>
 
 #define MM_VERSION_MAJOR        1
 #define MM_VERSION_MAJOR_SHIFT  16
@@ -67,11 +68,20 @@ void set_mm_boot_arg1(uint64_t a1)
 	struct efi_secure_shared_buffer *mm_shared_buffer = (struct efi_secure_shared_buffer *)a1;
 
 	mm_shared_buffer->mm_payload_boot_info.header.version = 0x01;
+    // sbi_printf("mm_shared_buffer: %lx\n", a1);
+    // sbi_printf("before sp_mem_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_mem_base);
+    // sbi_printf("before sp_mem_limit: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_mem_limit);
+    // sbi_printf("before sp_image_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_image_base);
+    // sbi_printf("before sp_stack_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_stack_base);
+    // sbi_printf("before sp_heap_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_heap_base);
+    // sbi_printf("before sp_ns_comm_buf_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_ns_comm_buf_base);
+    // sbi_printf("before sp_shared_buf_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_shared_buf_base);
+    // sbi_printf("before sp_image_size: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_image_size);
 	mm_shared_buffer->mm_payload_boot_info.sp_mem_base	= 0x80C00000;
 	mm_shared_buffer->mm_payload_boot_info.sp_mem_limit	= 0x82000000;
 	mm_shared_buffer->mm_payload_boot_info.sp_image_base = 0x80C00000; // sp_mem_base
 	mm_shared_buffer->mm_payload_boot_info.sp_stack_base =
-		0x81FFFFFF; // sp_heap_base + sp_heap_size + SpStackSize
+		0x81F7FFFF; // sp_heap_base + sp_heap_size + SpStackSize
 	mm_shared_buffer->mm_payload_boot_info.sp_heap_base =
 		0x80F00000; // sp_mem_base + sp_image_size
 	mm_shared_buffer->mm_payload_boot_info.sp_ns_comm_buf_base = 0xFFE00000;
@@ -86,6 +96,20 @@ void set_mm_boot_arg1(uint64_t a1)
 	mm_shared_buffer->mm_cpu_info[0].linear_id		 = 0;
 	mm_shared_buffer->mm_cpu_info[0].flags		 = 0;
 	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
+
+    // sbi_printf("sp_mem_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_mem_base);
+    // sbi_printf("sp_mem_limit: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_mem_limit);
+    // sbi_printf("sp_image_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_image_base);
+    // sbi_printf("sp_stack_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_stack_base);
+    // sbi_printf("sp_heap_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_heap_base);
+    // sbi_printf("sp_ns_comm_buf_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_ns_comm_buf_base);
+    // sbi_printf("sp_shared_buf_base: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_shared_buf_base);
+    // sbi_printf("sp_image_size: %lx\n", mm_shared_buffer->mm_payload_boot_info.sp_image_size);
+}
+
+void qemu_mem_move()
+{
+    sbi_memcpy((void*)0x80C00000, (void*)0x20000000, 0x1400000);
 }
 
 /*
@@ -102,6 +126,8 @@ int spm_mm_setup(void *fdt, int nodeoff,
 	if (rc) {
 		return SBI_EINVAL;
 	}
+
+    qemu_mem_move();
 
 	val = csr_read(CSR_MSTATUS);
 	val = INSERT_FIELD(val, MSTATUS_MPP, PRV_S);
