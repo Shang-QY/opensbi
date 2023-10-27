@@ -1,3 +1,0 @@
-HEADER: sbi_utils/spm/fdt_spm.h
-TYPE: struct fdt_spm
-NAME: fdt_spm_service_groups

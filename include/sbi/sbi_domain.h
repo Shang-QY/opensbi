@@ -12,6 +12,7 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_trap.h>
 
 struct sbi_scratch;
 
@@ -324,5 +325,49 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
+
+/** Representation of Secure Partition context */
+struct sp_context {
+	/** secure context for all general registers */
+	struct sbi_trap_regs regs;
+	/** secure context for S mode CSR registers */
+	uint64_t csr_stvec;
+	uint64_t csr_sscratch;
+	uint64_t csr_sie;
+	uint64_t csr_satp;
+	/**
+	 * stack address to restore C runtime context from after
+	 * returning from a synchronous entry into Secure Partition.
+	 */
+	uintptr_t c_rt_ctx;
+	/** OpenSBI domain in which Secure Partition runs */
+	struct sbi_domain *dom;
+};
+
+/**
+ * This function takes an SP context pointer and performs a synchronous entry
+ * into it.
+ * @param ctx pointer to SP context
+ * @return 0 on success
+ * @return other values decided by SP if it encounters an exception while running
+ */
+uint64_t spm_sp_synchronous_entry(struct sp_context *ctx);
+
+/**
+ * This function returns to the place where spm_sp_synchronous_entry() was
+ * called originally.
+ * @param ctx pointer to SP context
+ * @param rc the return value for the original entry call
+ */
+void spm_sp_synchronous_exit(struct sp_context *ctx, uint64_t rc);
+
+/**
+ * This function used to get the OpenSBI domain in which Secure Partition runs
+ * @param fdt pointer to FDT
+ * @param nodeoff the current Secure Partition node offset in FDT
+ * @param output_domain output field to get the matching domain structure
+ * @return 0 on success and negative error code if no domain matches
+ */
+int spm_sp_find_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain);
 
 #endif

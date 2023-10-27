@@ -13,5 +13,5 @@ libsbiutils-objs-$(CONFIG_FDT_RPXY) += rpxy/fdt_rpxy_drivers.o
 carray-fdt_rpxy_drivers-$(CONFIG_FDT_RPXY_MBOX) += fdt_rpxy_mbox
 libsbiutils-objs-$(CONFIG_FDT_RPXY_MBOX) += rpxy/fdt_rpxy_mbox.o
 
-carray-fdt_rpxy_drivers-$(CONFIG_FDT_RPXY_SPM) += fdt_rpxy_spm
-libsbiutils-objs-$(CONFIG_FDT_RPXY_SPM) += rpxy/fdt_rpxy_spm.o
+carray-fdt_rpxy_drivers-$(CONFIG_FDT_RPXY_SDM) += fdt_rpxy_spm
+libsbiutils-objs-$(CONFIG_FDT_RPXY_SDM) += rpxy/fdt_rpxy_spm.o
