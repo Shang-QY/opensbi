@@ -7,6 +7,9 @@
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_rpxy.h>
+#include <sbi/sbi_domain.h>
+#include <libfdt.h>
+
 #include <sbi_utils/rpxy/fdt_rpxy.h>
 #include <sbi/sbi_console.h>
 #include <sbi/riscv_asm.h>
@@ -103,6 +106,46 @@ void set_mm_boot_arg1(uint64_t a1)
 	mm_shared_buffer->mm_cpu_info[0].linear_id		 = 0;
 	mm_shared_buffer->mm_cpu_info[0].flags		 = 0;
 	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
+}
+
+/**
+ * This function used to get the OpenSBI domain in which Secure Partition runs
+ * @param fdt pointer to FDT
+ * @param nodeoff the current Secure Partition node offset in FDT
+ * @param output_domain output field to get the matching domain structure
+ * @return 0 on success and negative error code if no domain matches
+ */
+int spm_sp_find_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain)
+{
+	const u32 *val;
+	int domain_offset, len;
+	char name[64];
+	u32 i;
+	struct sbi_domain *dom;
+
+	val = fdt_getprop(fdt, nodeoff, "opensbi-domain", &len);
+	if (!val || len < 4) {
+		return SBI_EINVAL;
+	}
+
+	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
+	if (domain_offset < 0) {
+		return SBI_EINVAL;
+	}
+
+	/* Read DT node name and find match */
+	strncpy(name, fdt_get_name(fdt, domain_offset, NULL),
+			sizeof(name));
+	name[sizeof(name) - 1] = '\0';
+
+	sbi_domain_for_each(i, dom) {
+		if (!sbi_strcmp(dom->name, name)) {
+			*output_domain = dom;
+			return SBI_SUCCESS;
+		}
+	}
+
+	return SBI_EINVAL;
 }
 
 /*

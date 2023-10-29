@@ -361,13 +361,4 @@ uint64_t spm_sp_synchronous_entry(struct sp_context *ctx);
  */
 void spm_sp_synchronous_exit(struct sp_context *ctx, uint64_t rc);
 
-/**
- * This function used to get the OpenSBI domain in which Secure Partition runs
- * @param fdt pointer to FDT
- * @param nodeoff the current Secure Partition node offset in FDT
- * @param output_domain output field to get the matching domain structure
- * @return 0 on success and negative error code if no domain matches
- */
-int spm_sp_find_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain);
-
 #endif
