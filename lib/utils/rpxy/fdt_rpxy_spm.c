@@ -43,7 +43,7 @@ int fdt_spm_request_manager(void *fdt, int nodeoff, struct fdt_spm **out_manager
 #define MM_VERSION_COMPILED     MM_VERSION_FORM(MM_VERSION_MAJOR, \
                                                 MM_VERSION_MINOR)
 
-static struct sp_context mm_context;
+static struct dd_context mm_context;
 
 struct efi_param_header {
 	uint8_t type;	/* type of the structure */

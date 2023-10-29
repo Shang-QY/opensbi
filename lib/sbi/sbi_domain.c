@@ -824,7 +824,7 @@ fail_free_domain_hart_ptr_offset:
 /*
  * Save current CSR registers context and restore original context.
  */
-static void save_restore_csr_context(struct sp_context *ctx)
+static void save_restore_csr_context(struct dd_context *ctx)
 {
 	uint64_t tmp;
 
@@ -846,8 +846,8 @@ static void save_restore_csr_context(struct sp_context *ctx)
 }
 
 /** Assembly helpers */
-uint64_t spm_secure_partition_enter(struct sbi_trap_regs *regs, uintptr_t *c_rt_ctx);
-void spm_secure_partition_exit(uint64_t c_rt_ctx, uint64_t ret);
+uint64_t domain_enter_helper(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
+void domain_exit_helper(uint64_t c_rt_ctx, uint64_t ret);
 
 void domain_switch(struct sbi_domain *target_dom)
 {
@@ -864,7 +864,7 @@ void domain_switch(struct sbi_domain *target_dom)
     sbi_hart_pmp_configure(scratch);
 }
 
-uint64_t spm_sp_synchronous_entry(struct sp_context *ctx)
+uint64_t spm_sp_synchronous_entry(struct dd_context *ctx)
 {
 	uint64_t rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
@@ -876,7 +876,7 @@ uint64_t spm_sp_synchronous_entry(struct sp_context *ctx)
 	save_restore_csr_context(ctx);
 
 	/* Enter Secure Partition */
-	rc = spm_secure_partition_enter(&ctx->regs, &ctx->c_rt_ctx);
+	rc = domain_enter_helper(&ctx->regs, &ctx->c_rt_ctx);
 
 	/* Restore original domain */
 	domain_switch(dom);
@@ -884,7 +884,7 @@ uint64_t spm_sp_synchronous_entry(struct sp_context *ctx)
 	return rc;
 }
 
-void spm_sp_synchronous_exit(struct sp_context *ctx, uint64_t rc)
+void spm_sp_synchronous_exit(struct dd_context *ctx, uint64_t rc)
 {
 	/* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
@@ -908,5 +908,5 @@ void spm_sp_synchronous_exit(struct sp_context *ctx, uint64_t rc)
 	 * synchronous entry into the secure partition. Jump back to the
 	 * original C runtime context with the value of rc in a0;
 	 */
-	spm_secure_partition_exit(ctx->c_rt_ctx, rc);
+	domain_exit_helper(ctx->c_rt_ctx, rc);
 }

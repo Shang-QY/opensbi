@@ -8,17 +8,17 @@
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_scratch.h>
 	.align 3
-	.global spm_secure_partition_enter
+	.global domain_enter_helper
 
 	/* ---------------------------------------------------------------------
-	 * This function is called with SP_EL0 as stack. Here we stash our EL3
+	 * This function is called with M-mode runtime stack. Here we stash our
 	 * callee-saved registers on to the stack as a part of saving the C
-	 * runtime and enter the secure payload.
+	 * runtime and enter the secure domain payload.
 	 * 'x0' contains a pointer to the memory where the address of the C
 	 *  runtime context is to be saved.
 	 * ---------------------------------------------------------------------
 	 */
-spm_secure_partition_enter:
+domain_enter_helper:
 	/* Make space for the registers that we're going to save */
 	REG_S   sp, 0(a1)
 	add	sp, sp, -(SBI_TRAP_REGS_SIZE)
@@ -69,17 +69,17 @@ spm_secure_partition_enter:
 	call	_trap_exit
 
 	.align 3
-	.global spm_secure_partition_exit
+	.global domain_exit_helper
 	/* ---------------------------------------------------------------------
 	 * This function is called with 'x0' pointing to a C runtime context
-	 * saved in spm_secure_partition_enter().
+	 * saved in domain_enter_helper().
 	 * It restores the saved registers and jumps to that runtime with 'x0'
 	 * as the new SP register. This destroys the C runtime context that had
 	 * been built on the stack below the saved context by the caller. Later
 	 * the second parameter 'x1' is passed as a return value to the caller.
 	 * ---------------------------------------------------------------------
 	 */
-spm_secure_partition_exit:
+domain_exit_helper:
 	/* Restore the previous stack */
 	add	sp, a0, 0
 
@@ -115,7 +115,7 @@ spm_secure_partition_exit:
 
 	/* ---------------------------------------------------------------------
 	 * This should take us back to the instruction after the call to the
-	 * last spm_secure_partition_enter().* Place the second parameter to a0
+	 * last domain_enter_helper().* Place the second parameter to a0
 	 * so that the caller will see it as a return value from the original
 	 * entry call.
 	 * ---------------------------------------------------------------------

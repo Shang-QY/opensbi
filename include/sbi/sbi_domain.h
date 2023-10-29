@@ -326,8 +326,8 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
 
-/** Representation of Secure Partition context */
-struct sp_context {
+/** Representation of Dynamic Domain context */
+struct dd_context {
 	/** secure context for all general registers */
 	struct sbi_trap_regs regs;
 	/** secure context for S mode CSR registers */
@@ -345,20 +345,20 @@ struct sp_context {
 };
 
 /**
- * This function takes an SP context pointer and performs a synchronous entry
- * into it.
- * @param ctx pointer to SP context
+ * This function takes an DD context pointer and performs a synchronous
+ * entry into it.
+ * @param ctx pointer to DD context
  * @return 0 on success
- * @return other values decided by SP if it encounters an exception while running
+ * @return other values decided by DD if it encounters errors
  */
-uint64_t spm_sp_synchronous_entry(struct sp_context *ctx);
+uint64_t spm_sp_synchronous_entry(struct dd_context *ctx);
 
 /**
  * This function returns to the place where spm_sp_synchronous_entry() was
  * called originally.
- * @param ctx pointer to SP context
+ * @param ctx pointer to DD context
  * @param rc the return value for the original entry call
  */
-void spm_sp_synchronous_exit(struct sp_context *ctx, uint64_t rc);
+void spm_sp_synchronous_exit(struct dd_context *ctx, uint64_t rc);
 
 #endif
