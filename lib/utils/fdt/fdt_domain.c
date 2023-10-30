@@ -521,14 +521,14 @@ fail_free_domain:
 	return err;
 }
 
-static int __fdt_parse_dynamic_domain(void *fdt, int dynamic_domain_offset,
+static int __fdt_parse_dynamic_domain(void *fdt, int dd_offset,
 					   void *opaque)
 {
 	u32 val32;
 	const u32 *val;
 	struct sbi_dynamic_domain *dd;
 	struct sbi_domain *dom;
-    struct dd_context *ctx;
+	struct dd_context *ctx;
 	int i, err = 0, len, domain_offset;
 	char name[64];
 
@@ -536,17 +536,19 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dynamic_domain_offset,
 	if (!dd)
 		return SBI_ENOMEM;
 
-	val = fdt_getprop(fdt, dynamic_domain_offset, "domain-instance", &len);
+	/* Read "domain-instance" DT property and find matched domain */
+	val = fdt_getprop(fdt, dd_offset, "domain-instance", &len);
 	if (!val || len < 4) {
-		return SBI_EINVAL;
+		err = SBI_EINVAL;
+		goto fail_free;
 	}
 
 	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
 	if (domain_offset < 0) {
-		return SBI_EINVAL;
+		err = SBI_EINVAL;
+		goto fail_free;
 	}
 
-	/* Read DT node name and find match */
 	strncpy(name, fdt_get_name(fdt, domain_offset, NULL),
 			sizeof(name));
 	name[sizeof(name) - 1] = '\0';
@@ -559,7 +561,7 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dynamic_domain_offset,
 
 	/* Read "boot-order" DT property */
 	val32 = -1U;
-	val = fdt_getprop(fdt, dynamic_domain_offset, "boot-order", &len);
+	val = fdt_getprop(fdt, dd_offset, "boot-order", &len);
 	if (val && len >= 4) {
 		val32 = fdt32_to_cpu(val[0]);
 	}
@@ -567,13 +569,17 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dynamic_domain_offset,
 
 	/* Read "excution-ctx-count" DT property */
 	val32 = 0x1;
-	val = fdt_getprop(fdt, dynamic_domain_offset, "excution-ctx-count", &len);
+	val = fdt_getprop(fdt, dd_offset, "excution-ctx-count", &len);
 	if (val && len >= 4) {
 		val32 = fdt32_to_cpu(val[0]);
 	}
 	dd->excution_ctx_count = val32;
+	if (dd->excution_ctx_count != 1) {
+		err = SBI_EINVAL;
+		goto fail_free;
+	}
 
-    dd->context = sbi_calloc(sizeof(*ctx),
+	dd->context = sbi_calloc(sizeof(*ctx),
 				  dd->excution_ctx_count);
 	if (!dd->context) {
 		err = SBI_ENOMEM;
@@ -633,9 +639,9 @@ int fdt_domains_populate(void *fdt)
 	/* Iterate over each domain in FDT and populate details */
 	err = fdt_iterate_each_domain(fdt, &cold_domain_offset,
 				       __fdt_parse_domain);
-    if (err)
-        return err;
+	if (err)
+		return err;
 
-    return fdt_iterate_each_dynamic_domain(fdt, NULL,
+	return fdt_iterate_each_dynamic_domain(fdt, NULL,
 				       __fdt_parse_dynamic_domain);
 }
