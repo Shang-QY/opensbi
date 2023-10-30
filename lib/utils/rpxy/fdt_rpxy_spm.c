@@ -138,7 +138,7 @@ int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **outp
 			sizeof(name));
 	name[sizeof(name) - 1] = '\0';
 
-	return spm_sp_find_dynamic_domain(name, output_dd);
+	return sbi_find_dynamic_domain(name, output_dd);
 }
 
 /*
@@ -169,9 +169,9 @@ static int spm_message_handler_mm(int srv_id,
 		*((int32_t *)rx) = 0;
 		*((uint32_t *)(rx + sizeof(uint32_t))) = MM_VERSION_COMPILED;
 	} else if (RPMI_MM_SRV_MM_COMMUNICATE == srv_id) {
-		spm_sp_synchronous_entry(dd);
+		sbi_dynamic_domain_entry(dd);
 	} else if (RPMI_MM_SRV_MM_COMPLETE == srv_id) {
-		spm_sp_synchronous_exit(dd, 0);
+		sbi_dynamic_domain_exit(dd, 0);
 	}
 	return 0;
 }

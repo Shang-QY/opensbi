@@ -845,7 +845,7 @@ static void save_restore_csr_context(struct dd_context *ctx)
 uint64_t domain_enter_helper(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
 void domain_exit_helper(uint64_t c_rt_ctx, uint64_t ret);
 
-void domain_switch(struct sbi_domain *target_dom)
+static void domain_switch(struct sbi_domain *target_dom)
 {
     struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
     struct sbi_domain *dom = sbi_domain_thishart_ptr();
@@ -907,7 +907,7 @@ int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
 	return 0;
 }
 
-int spm_sp_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd)
+int sbi_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd)
 {
 	struct sbi_dynamic_domain *dd;
 
@@ -920,7 +920,7 @@ int spm_sp_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **ou
 	return SBI_EINVAL;
 }
 
-uint64_t spm_sp_synchronous_entry(struct sbi_dynamic_domain *dd)
+uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd)
 {
 	uint64_t rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
@@ -941,7 +941,7 @@ uint64_t spm_sp_synchronous_entry(struct sbi_dynamic_domain *dd)
 	return rc;
 }
 
-void spm_sp_synchronous_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
+void sbi_dynamic_domain_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 {
     struct dd_context *ctx = dd->context;
 
@@ -967,7 +967,7 @@ void spm_sp_synchronous_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 	save_restore_csr_context(ctx);
 
 	/*
-	 * The DDM must have initiated the original request through a
+	 * The DD manager must have initiated the original request through a
 	 * synchronous entry into the secure partition. Jump back to the
 	 * original C runtime context with the value of rc in a0;
 	 */
@@ -988,7 +988,7 @@ int sbi_dynamic_domain_init(struct sbi_scratch *scratch)
 
         __asm__ __volatile__("sfence.vma" : : : "memory");
 
-        if (spm_sp_synchronous_entry(dd))
+        if (sbi_dynamic_domain_entry(dd))
 			return rc;
     }
 	return 0;
