@@ -17,14 +17,7 @@
 #include <sbi/sbi_platform.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_string.h>
-#include <libfdt.h>
-#include <libfdt_env.h>
-#include <sbi/sbi_math.h>
-#include <sbi/sbi_error.h>
-#include <sbi/riscv_asm.h>
 #include <sbi/sbi_hart.h>
-#include <sbi_utils/fdt/fdt_helper.h>
-#include <sbi/sbi_console.h>
 
 /*
  * We allocate an extra element because sbi_domain_for_each() expects
@@ -914,52 +907,16 @@ int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
 	return 0;
 }
 
-int spm_sp_find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **output_domain)
+int spm_sp_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd)
 {
-	const u32 *val;
-	int domain_offset, len;
-	char name[64];
-
-	val = fdt_getprop(fdt, nodeoff, "opensbi-dynamic-domain", &len);
-	if (!val || len < 4) {
-        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
-		return SBI_EINVAL;
-	}
-
-	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
-	if (domain_offset < 0) {
-        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
-		return SBI_EINVAL;
-	}
-
-	val = fdt_getprop(fdt, domain_offset, "domain-instance", &len);
-	if (!val || len < 4) {
-        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
-		return SBI_EINVAL;
-	}
-
-	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
-	if (domain_offset < 0) {
-        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
-		return SBI_EINVAL;
-	}
-
-	/* Read DT node name and find match */
-	strncpy(name, fdt_get_name(fdt, domain_offset, NULL),
-			sizeof(name));
-	name[sizeof(name) - 1] = '\0';
-    sbi_printf("[SQY debug] dd-fdt name: %s \n", name);
-
 	struct sbi_dynamic_domain *dd;
 
-	sbi_list_for_each_entry(dd, &dynamic_domain_list, head) {
-        sbi_printf("[SQY debug] dd-mem name: %s \n", dd->dom->name);
-		if (!sbi_strcmp(dd->dom->name, name)) {
-			*output_domain = dd;
+	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
+		if (!sbi_strcmp(dd->dom->name, domain_name)) {
+			*output_dd = dd;
 			return SBI_SUCCESS;
 		}
-    }
-    sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
+
 	return SBI_EINVAL;
 }
 
@@ -1010,7 +967,7 @@ void spm_sp_synchronous_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 	save_restore_csr_context(ctx);
 
 	/*
-	 * The SPM must have initiated the original request through a
+	 * The DDM must have initiated the original request through a
 	 * synchronous entry into the secure partition. Jump back to the
 	 * original C runtime context with the value of rc in a0;
 	 */

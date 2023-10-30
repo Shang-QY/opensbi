@@ -107,6 +107,40 @@ void set_mm_boot_info(uint64_t a1)
 	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
 }
 
+int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **output_dd)
+{
+	const u32 *val;
+	int domain_offset, len;
+	char name[64];
+
+	val = fdt_getprop(fdt, nodeoff, "opensbi-dynamic-domain", &len);
+	if (!val || len < 4) {
+		return SBI_EINVAL;
+	}
+
+	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
+	if (domain_offset < 0) {
+		return SBI_EINVAL;
+	}
+
+	val = fdt_getprop(fdt, domain_offset, "domain-instance", &len);
+	if (!val || len < 4) {
+		return SBI_EINVAL;
+	}
+
+	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
+	if (domain_offset < 0) {
+		return SBI_EINVAL;
+	}
+
+	/* Read DT node name and find match */
+	strncpy(name, fdt_get_name(fdt, domain_offset, NULL),
+			sizeof(name));
+	name[sizeof(name) - 1] = '\0';
+
+	return spm_sp_find_dynamic_domain(name, output_dd);
+}
+
 /*
  * Initialize StandaloneMm SP context.
  */
@@ -115,7 +149,7 @@ int spm_mm_setup(void *fdt, int nodeoff,
 {
 	int rc;
 
-	rc = spm_sp_find_dynamic_domain(fdt, nodeoff, &dd);
+	rc = find_dynamic_domain(fdt, nodeoff, &dd);
 	if (rc) {
         sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
 		return SBI_EINVAL;

@@ -379,7 +379,7 @@ int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd);
  * @param output_domain output field to get the matching domain structure
  * @return 0 on success and negative error code if no domain matches
  */
-int spm_sp_find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **output_domain);
+int spm_sp_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd);
 
 /**
  * This function takes an DD context pointer and performs a synchronous
