@@ -849,46 +849,52 @@ static void domain_switch(struct sbi_domain *target_dom)
 
 int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
 {
-	// u32 i;
+	u32 i;
+    bool inserted = false;
+    unsigned long val;
 	struct sbi_dynamic_domain *tdd;
 
 	/* Sanity checks */
 	if (!dd || !dd->dom || domain_finalized)
 		return SBI_EINVAL;
 
-	/* Check if DD already discovered or contain the same domain with others */
+	/* Check if DD contains the same domain with others */
 	sbi_list_for_each_entry(tdd, &dynamic_domain_list, head) {
-		if (tdd == dd)
-			return SBI_EALREADY;
         if (tdd->dom == dd->dom)
-            return SBI_EINVAL;
+            return SBI_EALREADY;
 	}
 
-	/* Assign index to domain */
-    // keep order
+    /* Keep the list order consistent with the boot order */
     SBI_INIT_LIST_HEAD(&dd->head);
-    sbi_list_add(&dd->head, &(dynamic_domain_list));
+    sbi_list_for_each_entry(tdd, &dynamic_domain_list, head)
+        if (tdd->boot_order > dd->boot_order) {
+            sbi_list_add(&dd->head, tdd->head.prev);
+            inserted = true;
+            break;
+        }
+    if (!inserted)
+        sbi_list_add_tail(&dd->head, &dynamic_domain_list);
 
 	/* Initialize context for dynamic domain */
-    // for (i = 0; i < dd->excution_)
-    unsigned long val;
     val = csr_read(CSR_MSTATUS);
     val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
     val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
 
-    /* Setup secure M-mode CSR context */
-    dd->context->regs.mstatus = val;
-    dd->context->regs.mepc = dd->dom->next_addr;
+    for (i = 0; i < dd->excution_ctx_count; ++i) {
+        /* Setup secure M-mode CSR context */
+        dd->context[i].regs.mstatus = val;
+        dd->context[i].regs.mepc = dd->dom->next_addr;
 
-    /* Setup secure S-mode CSR context */
-    dd->context->csr_stvec = dd->dom->next_addr;
-    dd->context->csr_sscratch = 0;
-    dd->context->csr_sie = 0;
-    dd->context->csr_satp = 0;
+        /* Setup secure S-mode CSR context */
+        dd->context[i].csr_stvec = dd->dom->next_addr;
+        dd->context[i].csr_sscratch = 0;
+        dd->context[i].csr_sie = 0;
+        dd->context[i].csr_satp = 0;
 
-    /* Setup boot arguments */
-    dd->context->regs.a0 = current_hartid();
-    dd->context->regs.a1 = dd->dom->next_arg1;
+        /* Setup boot arguments */
+        dd->context[i].regs.a0 = current_hartid();
+        dd->context[i].regs.a1 = dd->dom->next_arg1;
+    }
 
 	return 0;
 }
@@ -911,7 +917,7 @@ uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd)
 {
 	uint64_t rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
-    struct dd_context *ctx = dd->context;
+    struct dd_context *ctx = &dd->context[0];
 
 	/* Switch to SP domain*/
     domain_switch(dd->dom);
