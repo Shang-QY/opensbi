@@ -13,6 +13,7 @@
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_list.h>
 
 struct sbi_scratch;
 
@@ -326,6 +327,12 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
 
+enum dd_state {
+	DD_STATE_RESET = 0,
+	DD_STATE_IDLE,
+	DD_STATE_BUSY
+};
+
 /** Representation of Dynamic Domain context */
 struct dd_context {
 	/** secure context for all general registers */
@@ -340,9 +347,39 @@ struct dd_context {
 	 * returning from a synchronous entry into Secure Partition.
 	 */
 	uintptr_t c_rt_ctx;
+    int state;
+};
+
+/** Representation of OpenSBI Dynamic Domain */
+struct sbi_dynamic_domain {
+	/** List head to a set of service groups */
+	struct sbi_dlist head;
+
 	/** OpenSBI domain in which Secure Partition runs */
 	struct sbi_domain *dom;
+
+    u32 boot_order;
+    u32 excution_ctx_count;
+    struct dd_context *context;
 };
+
+/**
+ * Register a new domain
+ * @param dom pointer to domain
+ * @param assign_mask pointer to HART mask of HARTs assigned to the domain
+ *
+ * @return 0 on success and negative error code on failure
+ */
+int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd);
+
+/**
+ * This function used to get the OpenSBI domain in which Secure Partition runs
+ * @param fdt pointer to FDT
+ * @param nodeoff the current Secure Partition node offset in FDT
+ * @param output_domain output field to get the matching domain structure
+ * @return 0 on success and negative error code if no domain matches
+ */
+int spm_sp_find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **output_domain);
 
 /**
  * This function takes an DD context pointer and performs a synchronous
@@ -351,7 +388,7 @@ struct dd_context {
  * @return 0 on success
  * @return other values decided by DD if it encounters errors
  */
-uint64_t spm_sp_synchronous_entry(struct dd_context *ctx);
+uint64_t spm_sp_synchronous_entry(struct sbi_dynamic_domain *dd);
 
 /**
  * This function returns to the place where spm_sp_synchronous_entry() was
@@ -359,6 +396,6 @@ uint64_t spm_sp_synchronous_entry(struct dd_context *ctx);
  * @param ctx pointer to DD context
  * @param rc the return value for the original entry call
  */
-void spm_sp_synchronous_exit(struct dd_context *ctx, uint64_t rc);
+void spm_sp_synchronous_exit(struct sbi_dynamic_domain *dd, uint64_t rc);
 
 #endif

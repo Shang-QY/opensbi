@@ -48,6 +48,9 @@ struct sbi_domain root = {
 
 static unsigned long domain_hart_ptr_offset;
 
+/** List of RPMI proxy service groups */
+static SBI_LIST_HEAD(dynamic_domain_list);
+
 struct sbi_domain *sbi_hartindex_to_domain(u32 hartindex)
 {
 	struct sbi_scratch *scratch;
@@ -864,13 +867,110 @@ void domain_switch(struct sbi_domain *target_dom)
     sbi_hart_pmp_configure(scratch);
 }
 
-uint64_t spm_sp_synchronous_entry(struct dd_context *ctx)
+int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
+{
+	// u32 i;
+	// int rc;
+	// struct sbi_dynamic_domain *tdom;
+
+	/* Sanity checks */
+	if (!dd || !dd->dom || domain_finalized)
+		return SBI_EINVAL;
+
+    /* Sanity checks */
+    // possible harts is vacent or all harts
+    // assigned harts is vacent
+
+	/* Check if domain already discovered */
+	// sbi_dynamic_domain_for_each(i, tdd) {
+	// 	if (tdd == dd)
+	// 		return SBI_EALREADY;
+	// }
+
+	/* Assign index to domain */
+    // keep order
+    SBI_INIT_LIST_HEAD(&dd->head);
+    sbi_list_add(&dd->head, &(dynamic_domain_list));
+
+    unsigned long val;
+    val = csr_read(CSR_MSTATUS);
+    val = INSERT_FIELD(val, MSTATUS_MPP, PRV_S);
+    val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+
+    /* Setup secure M-mode CSR context */
+    dd->context->regs.mstatus = val;
+    dd->context->regs.mepc = dd->dom->next_addr;
+
+    /* Setup secure S-mode CSR context */
+    dd->context->csr_stvec = dd->dom->next_addr;
+    dd->context->csr_sscratch = 0;
+    dd->context->csr_sie = 0;
+    dd->context->csr_satp = 0;
+
+    /* Setup boot arguments */
+    dd->context->regs.a0 = current_hartid();
+    dd->context->regs.a1 = dd->dom->next_arg1;
+
+	return 0;
+}
+
+int spm_sp_find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **output_domain)
+{
+	const u32 *val;
+	int domain_offset, len;
+	char name[64];
+
+	val = fdt_getprop(fdt, nodeoff, "opensbi-dynamic-domain", &len);
+	if (!val || len < 4) {
+        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
+		return SBI_EINVAL;
+	}
+
+	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
+	if (domain_offset < 0) {
+        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
+		return SBI_EINVAL;
+	}
+
+	val = fdt_getprop(fdt, domain_offset, "domain-instance", &len);
+	if (!val || len < 4) {
+        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
+		return SBI_EINVAL;
+	}
+
+	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
+	if (domain_offset < 0) {
+        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
+		return SBI_EINVAL;
+	}
+
+	/* Read DT node name and find match */
+	strncpy(name, fdt_get_name(fdt, domain_offset, NULL),
+			sizeof(name));
+	name[sizeof(name) - 1] = '\0';
+    sbi_printf("[SQY debug] dd-fdt name: %s \n", name);
+
+	struct sbi_dynamic_domain *dd;
+
+	sbi_list_for_each_entry(dd, &dynamic_domain_list, head) {
+        sbi_printf("[SQY debug] dd-mem name: %s \n", dd->dom->name);
+		if (!sbi_strcmp(dd->dom->name, name)) {
+			*output_domain = dd;
+			return SBI_SUCCESS;
+		}
+    }
+    sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
+	return SBI_EINVAL;
+}
+
+uint64_t spm_sp_synchronous_entry(struct sbi_dynamic_domain *dd)
 {
 	uint64_t rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+    struct dd_context *ctx = dd->context;
 
 	/* Switch to SP domain*/
-    domain_switch(ctx->dom);
+    domain_switch(dd->dom);
 
 	/* Save current CSR context and setup Secure Partition's CSR context */
 	save_restore_csr_context(ctx);
@@ -884,8 +984,14 @@ uint64_t spm_sp_synchronous_entry(struct dd_context *ctx)
 	return rc;
 }
 
-void spm_sp_synchronous_exit(struct dd_context *ctx, uint64_t rc)
+void spm_sp_synchronous_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 {
+    struct dd_context *ctx = dd->context;
+
+    if (ctx->state == DD_STATE_RESET) {
+        ctx->state = DD_STATE_IDLE;
+    }
+
 	/* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
 	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);

@@ -43,7 +43,7 @@ int fdt_spm_request_manager(void *fdt, int nodeoff, struct fdt_spm **out_manager
 #define MM_VERSION_COMPILED     MM_VERSION_FORM(MM_VERSION_MAJOR, \
                                                 MM_VERSION_MINOR)
 
-static struct dd_context mm_context;
+static struct sbi_dynamic_domain *dd;
 
 struct efi_param_header {
 	uint8_t type;	/* type of the structure */
@@ -82,7 +82,7 @@ struct efi_secure_shared_buffer {
 	struct efi_secure_partition_cpu_info mm_cpu_info[1];
 };
 
-void set_mm_boot_arg1(uint64_t a1)
+void set_mm_boot_info(uint64_t a1)
 {
 	struct efi_secure_shared_buffer *mm_shared_buffer = (struct efi_secure_shared_buffer *)a1;
 
@@ -108,46 +108,6 @@ void set_mm_boot_arg1(uint64_t a1)
 	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
 }
 
-/**
- * This function used to get the OpenSBI domain in which Secure Partition runs
- * @param fdt pointer to FDT
- * @param nodeoff the current Secure Partition node offset in FDT
- * @param output_domain output field to get the matching domain structure
- * @return 0 on success and negative error code if no domain matches
- */
-int spm_sp_find_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain)
-{
-	const u32 *val;
-	int domain_offset, len;
-	char name[64];
-	u32 i;
-	struct sbi_domain *dom;
-
-	val = fdt_getprop(fdt, nodeoff, "opensbi-domain", &len);
-	if (!val || len < 4) {
-		return SBI_EINVAL;
-	}
-
-	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
-	if (domain_offset < 0) {
-		return SBI_EINVAL;
-	}
-
-	/* Read DT node name and find match */
-	strncpy(name, fdt_get_name(fdt, domain_offset, NULL),
-			sizeof(name));
-	name[sizeof(name) - 1] = '\0';
-
-	sbi_domain_for_each(i, dom) {
-		if (!sbi_strcmp(dom->name, name)) {
-			*output_domain = dom;
-			return SBI_SUCCESS;
-		}
-	}
-
-	return SBI_EINVAL;
-}
-
 /*
  * Initialize StandaloneMm SP context.
  */
@@ -155,35 +115,14 @@ int spm_mm_setup(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
 	int rc;
-	unsigned long val;
-	struct sbi_domain *dom;
 
-	rc = spm_sp_find_domain(fdt, nodeoff, &dom);
+	rc = spm_sp_find_dynamic_domain(fdt, nodeoff, &dd);
 	if (rc) {
+        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
 		return SBI_EINVAL;
 	}
 
-	val = csr_read(CSR_MSTATUS);
-	val = INSERT_FIELD(val, MSTATUS_MPP, PRV_S);
-	val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
-
-	/* Setup secure M-mode CSR context */
-	mm_context.regs.mstatus = val;
-	mm_context.regs.mepc = dom->next_addr;
-
-	/* Setup secure S-mode CSR context */
-	mm_context.csr_stvec = dom->next_addr;
-	mm_context.csr_sscratch = 0;
-	mm_context.csr_sie = 0;
-	mm_context.csr_satp = 0;
-
-	/* Setup boot arguments */
-	mm_context.regs.a0 = current_hartid();
-	mm_context.regs.a1 = dom->next_arg1;
-	set_mm_boot_arg1(dom->next_arg1);
-
-	/* Setup binding OpenSBI domain */
-	mm_context.dom = dom;
+	set_mm_boot_info(dd->dom->next_arg1);
 
 	return 0;
 }
@@ -203,7 +142,7 @@ int spm_mm_init(void)
 
 	__asm__ __volatile__("sfence.vma" : : : "memory");
 
-	rc = spm_sp_synchronous_entry(&mm_context);
+	rc = spm_sp_synchronous_entry(dd);
 
 	return rc;
 }
@@ -217,9 +156,9 @@ static int spm_message_handler_mm(int srv_id,
 		*((int32_t *)rx) = 0;
 		*((uint32_t *)(rx + sizeof(uint32_t))) = MM_VERSION_COMPILED;
 	} else if (RPMI_MM_SRV_MM_COMMUNICATE == srv_id) {
-		spm_sp_synchronous_entry(&mm_context);
+		spm_sp_synchronous_entry(dd);
 	} else if (RPMI_MM_SRV_MM_COMPLETE == srv_id) {
-		spm_sp_synchronous_exit(&mm_context, 0);
+		spm_sp_synchronous_exit(dd, 0);
 	}
 	return 0;
 }

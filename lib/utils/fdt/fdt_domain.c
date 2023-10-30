@@ -18,6 +18,36 @@
 #include <sbi_utils/fdt/fdt_domain.h>
 #include <sbi_utils/fdt/fdt_helper.h>
 
+int fdt_iterate_each_dynamic_domain(void *fdt, void *opaque,
+			    int (*fn)(void *fdt, int domain_offset,
+				       void *opaque))
+{
+	int rc, doffset, poffset;
+
+	if (!fdt || !fn)
+		return SBI_EINVAL;
+
+	poffset = fdt_path_offset(fdt, "/chosen");
+	if (poffset < 0)
+		return 0;
+	poffset = fdt_node_offset_by_compatible(fdt, poffset,
+						"opensbi,domain,config");
+	if (poffset < 0)
+		return 0;
+
+	fdt_for_each_subnode(doffset, fdt, poffset) {
+		if (fdt_node_check_compatible(fdt, doffset,
+					      "opensbi,domain,dynamic-instance"))
+			continue;
+
+		rc = fn(fdt, doffset, opaque);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
 int fdt_iterate_each_domain(void *fdt, void *opaque,
 			    int (*fn)(void *fdt, int domain_offset,
 				       void *opaque))
@@ -491,6 +521,77 @@ fail_free_domain:
 	return err;
 }
 
+static int __fdt_parse_dynamic_domain(void *fdt, int dynamic_domain_offset,
+					   void *opaque)
+{
+	u32 val32;
+	const u32 *val;
+	struct sbi_dynamic_domain *dd;
+	struct sbi_domain *dom;
+    struct dd_context *ctx;
+	int i, err = 0, len, domain_offset;
+	char name[64];
+
+	dd = sbi_zalloc(sizeof(*dd));
+	if (!dd)
+		return SBI_ENOMEM;
+
+	val = fdt_getprop(fdt, dynamic_domain_offset, "domain-instance", &len);
+	if (!val || len < 4) {
+		return SBI_EINVAL;
+	}
+
+	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
+	if (domain_offset < 0) {
+		return SBI_EINVAL;
+	}
+
+	/* Read DT node name and find match */
+	strncpy(name, fdt_get_name(fdt, domain_offset, NULL),
+			sizeof(name));
+	name[sizeof(name) - 1] = '\0';
+
+	sbi_domain_for_each(i, dom) {
+		if (!sbi_strcmp(dom->name, name)) {
+			dd->dom = dom;
+		}
+	}
+
+	/* Read "boot-order" DT property */
+	val32 = -1U;
+	val = fdt_getprop(fdt, dynamic_domain_offset, "boot-order", &len);
+	if (val && len >= 4) {
+		val32 = fdt32_to_cpu(val[0]);
+	}
+	dd->boot_order = val32;
+
+	/* Read "excution-ctx-count" DT property */
+	val32 = 0x1;
+	val = fdt_getprop(fdt, dynamic_domain_offset, "excution-ctx-count", &len);
+	if (val && len >= 4) {
+		val32 = fdt32_to_cpu(val[0]);
+	}
+	dd->excution_ctx_count = val32;
+
+    dd->context = sbi_calloc(sizeof(*ctx),
+				  dd->excution_ctx_count);
+	if (!dd->context) {
+		err = SBI_ENOMEM;
+		goto fail_free;
+	}
+
+	/* Register the dynamic domain */
+	err = sbi_dynamic_domain_register(dd);
+	if (err)
+		goto fail_free;
+
+	return 0;
+
+fail_free:
+	sbi_free(dom);
+	return err;
+}
+
 int fdt_domains_populate(void *fdt)
 {
 	const u32 *val;
@@ -530,6 +631,11 @@ int fdt_domains_populate(void *fdt)
 	}
 
 	/* Iterate over each domain in FDT and populate details */
-	return fdt_iterate_each_domain(fdt, &cold_domain_offset,
+	err = fdt_iterate_each_domain(fdt, &cold_domain_offset,
 				       __fdt_parse_domain);
+    if (err)
+        return err;
+
+    return fdt_iterate_each_dynamic_domain(fdt, NULL,
+				       __fdt_parse_dynamic_domain);
 }
