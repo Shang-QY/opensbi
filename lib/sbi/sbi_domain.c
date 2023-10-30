@@ -822,23 +822,10 @@ fail_free_domain_hart_ptr_offset:
  */
 static void save_restore_csr_context(struct dd_context *ctx)
 {
-	uint64_t tmp;
-
-	tmp = ctx->csr_stvec;
-	ctx->csr_stvec = csr_read(CSR_STVEC);
-	csr_write(CSR_STVEC, tmp);
-
-	tmp = ctx->csr_sscratch;
-	ctx->csr_sscratch = csr_read(CSR_SSCRATCH);
-	csr_write(CSR_SSCRATCH, tmp);
-
-	tmp = ctx->csr_sie;
-	ctx->csr_sie = csr_read(CSR_SIE);
-	csr_write(CSR_SIE, tmp);
-
-	tmp = ctx->csr_satp;
-	ctx->csr_satp = csr_read(CSR_SATP);
-	csr_write(CSR_SATP, tmp);
+	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
+	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
+	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
+	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
 }
 
 /** Assembly helpers */
@@ -863,31 +850,30 @@ static void domain_switch(struct sbi_domain *target_dom)
 int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
 {
 	// u32 i;
-	// int rc;
-	// struct sbi_dynamic_domain *tdom;
+	struct sbi_dynamic_domain *tdd;
 
 	/* Sanity checks */
 	if (!dd || !dd->dom || domain_finalized)
 		return SBI_EINVAL;
 
-    /* Sanity checks */
-    // possible harts is vacent or all harts
-    // assigned harts is vacent
-
-	/* Check if domain already discovered */
-	// sbi_dynamic_domain_for_each(i, tdd) {
-	// 	if (tdd == dd)
-	// 		return SBI_EALREADY;
-	// }
+	/* Check if DD already discovered or contain the same domain with others */
+	sbi_list_for_each_entry(tdd, &dynamic_domain_list, head) {
+		if (tdd == dd)
+			return SBI_EALREADY;
+        if (tdd->dom == dd->dom)
+            return SBI_EINVAL;
+	}
 
 	/* Assign index to domain */
     // keep order
     SBI_INIT_LIST_HEAD(&dd->head);
     sbi_list_add(&dd->head, &(dynamic_domain_list));
 
+	/* Initialize context for dynamic domain */
+    // for (i = 0; i < dd->excution_)
     unsigned long val;
     val = csr_read(CSR_MSTATUS);
-    val = INSERT_FIELD(val, MSTATUS_MPP, PRV_S);
+    val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
     val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
 
     /* Setup secure M-mode CSR context */
@@ -907,6 +893,7 @@ int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
 	return 0;
 }
 
+// keep track by domain_id from link list
 int sbi_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd)
 {
 	struct sbi_dynamic_domain *dd;

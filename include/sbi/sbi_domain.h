@@ -347,7 +347,7 @@ struct dd_context {
 	 * returning from a synchronous entry into Secure Partition.
 	 */
 	uintptr_t c_rt_ctx;
-    int state;
+	int state;
 };
 
 /** Representation of OpenSBI Dynamic Domain */
@@ -358,9 +358,9 @@ struct sbi_dynamic_domain {
 	/** OpenSBI domain in which Secure Partition runs */
 	struct sbi_domain *dom;
 
-    u32 boot_order;
-    u32 excution_ctx_count;
-    struct dd_context *context;
+	u32 boot_order;
+	u32 excution_ctx_count;
+	struct dd_context *context;
 };
 
 /**

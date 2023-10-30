@@ -536,7 +536,7 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dd_offset,
 	if (!dd)
 		return SBI_ENOMEM;
 
-	/* Read "domain-instance" DT property and find matched domain */
+	/* Read "domain-instance" DT property and get corresponding domain */
 	val = fdt_getprop(fdt, dd_offset, "domain-instance", &len);
 	if (!val || len < 4) {
 		err = SBI_EINVAL;
@@ -558,6 +558,10 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dd_offset,
 			dd->dom = dom;
 		}
 	}
+
+    /* Domain sanity checks, possible_harts field */
+    // possible harts is vacent or all harts
+    // assigned harts is vacent
 
 	/* Read "boot-order" DT property */
 	val32 = -1U;
