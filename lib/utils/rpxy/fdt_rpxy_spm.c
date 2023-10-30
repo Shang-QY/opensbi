@@ -22,7 +22,6 @@ struct fdt_spm {
 	const struct fdt_match *match_table;
 	int (*setup)(void *fdt, int nodeoff,
 			const struct fdt_match *match);
-	int (*init)(void);
 	int (*spm_message_handler)(int srv_id,
 			void *tx, u32 tx_len,
 			void *rx, u32 rx_len,
@@ -127,26 +126,6 @@ int spm_mm_setup(void *fdt, int nodeoff,
 	return 0;
 }
 
-/*
- * Jump to StandaloneMm SP for the first time.
- */
-int spm_mm_init(void)
-{
-	int rc;
-
-	/* clear pending interrupts */
-	csr_read_clear(CSR_MIP, MIP_MTIP);
-	csr_read_clear(CSR_MIP, MIP_STIP);
-	csr_read_clear(CSR_MIP, MIP_SSIP);
-	csr_read_clear(CSR_MIP, MIP_SEIP);
-
-	__asm__ __volatile__("sfence.vma" : : : "memory");
-
-	rc = spm_sp_synchronous_entry(dd);
-
-	return rc;
-}
-
 static int spm_message_handler_mm(int srv_id,
 				  void *tx, u32 tx_len,
 				  void *rx, u32 rx_len,
@@ -171,7 +150,6 @@ static const struct fdt_match fdt_spm_mm_match[] = {
 struct fdt_spm fdt_spm_mm = {
 	.match_table = fdt_spm_mm_match,
 	.setup = spm_mm_setup,
-	.init = spm_mm_init,
 	.spm_message_handler = spm_message_handler_mm,
 };
 
@@ -222,16 +200,6 @@ static int rpxy_spm_send_message(struct sbi_rpxy_service_group *grp,
 	return ret;
 }
 
-static int rpxy_spm_later_init(struct sbi_rpxy_service_group *grp)
-{
-	int ret;
-	struct rpxy_spm *rspm = container_of(grp, struct rpxy_spm, group);
-
-	ret = rspm->manager->init();
-
-	return ret;
-}
-
 static int rpxy_spm_init(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
@@ -253,7 +221,7 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 	}
 
 	/* Setup SPM service group manager, initialize SP context */
-	rc = manager->setup(fdt, nodeoff, match);   /* first phase init */
+	rc = manager->setup(fdt, nodeoff, match);
 	if (rc) {
 		sbi_free(rspm);
 		return 0;
@@ -266,7 +234,6 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 	rspm->group.num_services = data->num_services;
 	rspm->group.services = data->services;
 	rspm->group.send_message = rpxy_spm_send_message;
-	rspm->group.later_init = rpxy_spm_later_init;		/* second phase init */
 	rspm->manager = manager;
 
 	/* Register RPXY service group */

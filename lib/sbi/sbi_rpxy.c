@@ -226,15 +226,3 @@ int sbi_rpxy_init(struct sbi_scratch *scratch)
 
 	return sbi_platform_rpxy_init(sbi_platform_ptr(scratch));
 }
-
-int sbi_rpxy_final_init(struct sbi_scratch *scratch)
-{
-	int rc;
-	struct sbi_rpxy_service_group *grp;
-
-	sbi_list_for_each_entry(grp, &rpxy_group_list, head)
-		if (grp->later_init && (rc = grp->later_init(grp)))
-			return rc;
-
-	return 0;
-}

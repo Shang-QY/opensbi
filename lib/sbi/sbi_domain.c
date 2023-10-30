@@ -1016,3 +1016,23 @@ void spm_sp_synchronous_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 	 */
 	domain_exit_helper(ctx->c_rt_ctx, rc);
 }
+
+int sbi_dynamic_domain_init(struct sbi_scratch *scratch)
+{
+	int rc;
+	struct sbi_dynamic_domain *dd;
+
+	sbi_list_for_each_entry(dd, &dynamic_domain_list, head) {
+        /* clear pending interrupts */
+        csr_read_clear(CSR_MIP, MIP_MTIP);
+        csr_read_clear(CSR_MIP, MIP_STIP);
+        csr_read_clear(CSR_MIP, MIP_SSIP);
+        csr_read_clear(CSR_MIP, MIP_SEIP);
+
+        __asm__ __volatile__("sfence.vma" : : : "memory");
+
+        if (spm_sp_synchronous_entry(dd))
+			return rc;
+    }
+	return 0;
+}

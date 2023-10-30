@@ -398,4 +398,7 @@ uint64_t spm_sp_synchronous_entry(struct sbi_dynamic_domain *dd);
  */
 void spm_sp_synchronous_exit(struct sbi_dynamic_domain *dd, uint64_t rc);
 
+/** Initialize dynamic domains */
+int sbi_dynamic_domain_init(struct sbi_scratch *scratch);
+
 #endif
