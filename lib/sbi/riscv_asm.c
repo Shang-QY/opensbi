@@ -260,26 +260,26 @@ static unsigned long ctz(unsigned long x)
 
 int pmp_disable_all(unsigned int pmp_count)
 {
-    int pmpcfg_csr, pmpcfg_length;
-    unsigned int n = pmp_count - 1;
+	int pmpcfg_csr, pmpcfg_length;
+	unsigned int n = pmp_count - 1;
 
 	if (n >= PMP_COUNT)
 		return SBI_EINVAL;
 
 #if __riscv_xlen == 32
-	pmpcfg_csr      = CSR_PMPCFG0 + (n >> 2);
-    pmpcfg_length   = 1;
+	pmpcfg_csr	  = CSR_PMPCFG0 + (n >> 2);
+	pmpcfg_length = 1;
 #elif __riscv_xlen == 64
-	pmpcfg_csr      = (CSR_PMPCFG0 + (n >> 2)) & ~1;
-    pmpcfg_length   = 2;
+	pmpcfg_csr	  = (CSR_PMPCFG0 + (n >> 2)) & ~1;
+	pmpcfg_length = 2;
 #else
 # error "Unexpected __riscv_xlen"
 #endif
 
-    for (int i = CSR_PMPCFG0; i <= pmpcfg_csr; i += pmpcfg_length)
-        csr_write_num(i, 0);
+	for (int i = CSR_PMPCFG0; i <= pmpcfg_csr; i += pmpcfg_length)
+		csr_write_num(i, 0);
 
-    return SBI_OK;
+	return SBI_OK;
 }
 
 int pmp_disable(unsigned int n)
