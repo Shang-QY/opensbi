@@ -79,29 +79,28 @@ struct efi_secure_shared_buffer {
 
 static void mm_setup_boot_info(uint64_t a1)
 {
-	struct efi_secure_shared_buffer *mm_shared_buffer =
-                                (struct efi_secure_shared_buffer *)a1;
-
-	mm_shared_buffer->mm_payload_boot_info.header.version = 0x01;
-	mm_shared_buffer->mm_payload_boot_info.sp_mem_base	= 0x80C00000;
-	mm_shared_buffer->mm_payload_boot_info.sp_mem_limit	= 0x82000000;
-	mm_shared_buffer->mm_payload_boot_info.sp_image_base = 0x80C00000;
-	mm_shared_buffer->mm_payload_boot_info.sp_stack_base =
-		0x81FFFFFF; // sp_heap_base + sp_heap_size + SpStackSize
-	mm_shared_buffer->mm_payload_boot_info.sp_heap_base =
-		0x80F00000; // sp_mem_base + sp_image_size
-	mm_shared_buffer->mm_payload_boot_info.sp_ns_comm_buf_base = 0xFFE00000;
-	mm_shared_buffer->mm_payload_boot_info.sp_shared_buf_base = 0x81F80000;
-	mm_shared_buffer->mm_payload_boot_info.sp_image_size	 = 0x300000;
-	mm_shared_buffer->mm_payload_boot_info.sp_pcpu_stack_size = 0x10000;
-	mm_shared_buffer->mm_payload_boot_info.sp_heap_size	 = 0x800000;
-	mm_shared_buffer->mm_payload_boot_info.sp_ns_comm_buf_size = 0x200000;
-	mm_shared_buffer->mm_payload_boot_info.sp_shared_buf_size = 0x80000;
-	mm_shared_buffer->mm_payload_boot_info.num_sp_mem_region = 0x6;
-	mm_shared_buffer->mm_payload_boot_info.num_cpus	 = 1;
+	struct efi_secure_shared_buffer *mm_shared_buffer = (void *)a1;
+    struct efi_secure_partition_boot_info *mm_boot_info =
+                            &mm_shared_buffer->mm_payload_boot_info;
+	mm_boot_info->header.version = 0x01;
+	mm_boot_info->sp_mem_base	= 0x80C00000;
+	mm_boot_info->sp_mem_limit	= 0x82000000;
+	mm_boot_info->sp_image_base = 0x80C00000;
+    /* Stack from (sp_heap_base + sp_heap_size) to sp_shared_buf_base */
+	mm_boot_info->sp_stack_base = 0x81F7FFFF;
+	mm_boot_info->sp_heap_base = 0x80F00000;
+	mm_boot_info->sp_ns_comm_buf_base = 0xFFE00000;
+	mm_boot_info->sp_shared_buf_base = 0x81F80000;
+	mm_boot_info->sp_image_size	 = 0x300000;
+	mm_boot_info->sp_pcpu_stack_size = 0x10000;
+	mm_boot_info->sp_heap_size	 = 0x800000;
+	mm_boot_info->sp_ns_comm_buf_size = 0x200000;
+	mm_boot_info->sp_shared_buf_size = 0x80000;
+	mm_boot_info->num_sp_mem_region = 0x6;
+	mm_boot_info->num_cpus	 = 1;
 	mm_shared_buffer->mm_cpu_info[0].linear_id		 = 0;
 	mm_shared_buffer->mm_cpu_info[0].flags		 = 0;
-	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
+	mm_boot_info->cpu_info = mm_shared_buffer->mm_cpu_info;
 }
 
 int find_domain(void *fdt, int nodeoff, const char *compatible,
