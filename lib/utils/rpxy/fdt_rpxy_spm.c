@@ -145,16 +145,10 @@ struct fdt_spm fdt_spm_mm;
 int spm_mm_setup(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
-	int rc;
-    struct sbi_domain *dom;
-
-	rc = find_domain(fdt, nodeoff, "opensbi-domain-instance", &dom);
-	if (rc) {
+	if (find_domain(fdt, nodeoff, "opensbi-domain-instance", &fdt_spm_mm.dom))
 		return SBI_EINVAL;
-	}
-    fdt_spm_mm.dom = dom;
 
-	set_mm_boot_info(dom->next_arg1);
+	set_mm_boot_info(fdt_spm_mm.dom->next_arg1);
 
 	return 0;
 }
@@ -165,17 +159,13 @@ static int spm_message_handler_mm(struct sbi_rpxy_service_group *grp,
 				  void *rx, u32 rx_len,
 				  unsigned long *ack_len)
 {
-    struct sbi_domain *dom = fdt_spm_mm.dom;
-    if (!dom)
-        return SBI_EINVAL;
-
     int srv_id = srv->id;
 
 	if (RPMI_MM_SRV_MM_VERSION == srv_id) {
 		*((int32_t *)rx) = 0;
 		*((uint32_t *)(rx + sizeof(uint32_t))) = MM_VERSION_COMPILED;
 	} else if (RPMI_MM_SRV_MM_COMMUNICATE == srv_id) {
-		sbi_dynamic_domain_entry(dom->index);
+		sbi_dynamic_domain_entry(fdt_spm_mm.dom->index);
 	} else if (RPMI_MM_SRV_MM_COMPLETE == srv_id) {
 		sbi_dynamic_domain_exit(0);
 	}
