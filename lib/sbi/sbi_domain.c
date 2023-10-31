@@ -1061,10 +1061,10 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
         return rc;
 
     /* Restore original domain */
-    sbi_printf("[shangqy debug] dynamic_domain_init :domain_switch: dom: %p\n", dom);
+    // sbi_printf("[shangqy debug] dynamic_domain_init :domain_switch: dom: %p\n", dom);
     // sbi_printf("[shangqy debug] dynamic_domain_init :domain_switch: dom: \n");
 
-	// domain_switch(dom);
+	domain_switch(dom);
     // dd_state_set(ctx, DD_STATE_IDLE);
 
     return 0;
