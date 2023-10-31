@@ -863,3 +863,18 @@ static void dynamic_domain_context_exit(struct dd_context *ctx, uint64_t rc)
 	 */
 	context_exit_helper(ctx->c_rt_ctx, rc);
 }
+
+static void domain_switch(struct sbi_domain *target_dom)
+{
+	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
+	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+	u32 hartid = current_hartid();
+	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
+
+	sbi_hartmask_clear_hartindex(hartid, &dom->assigned_harts);
+	update_hartindex_to_domain(hartid, target_dom);
+	sbi_hartmask_set_hartindex(hartid, &target_dom->assigned_harts);
+
+	pmp_disable_all(pmp_count);
+	sbi_hart_pmp_configure(scratch);
+}

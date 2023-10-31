@@ -181,6 +181,9 @@ int misa_xlen(void);
 /* Get RISC-V ISA string representation */
 void misa_string(int xlen, char *out, unsigned int out_sz);
 
+/* Disable all pmp entries */
+int pmp_disable_all(unsigned int pmp_count);
+
 /* Disable pmp entry at a given index */
 int pmp_disable(unsigned int n);
 
