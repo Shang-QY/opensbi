@@ -349,7 +349,7 @@ struct dd_context {
 	 */
 	uintptr_t c_rt_ctx;
 	volatile int state;
-    spinlock_t state_lock;
+	spinlock_t state_lock;
 };
 
 /** Representation of OpenSBI Dynamic Domain */
