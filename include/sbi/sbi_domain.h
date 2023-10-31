@@ -14,6 +14,7 @@
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_list.h>
+#include <sbi/riscv_locks.h>
 
 struct sbi_scratch;
 
@@ -348,6 +349,7 @@ struct dd_context {
 	 */
 	uintptr_t c_rt_ctx;
 	int state;
+    spinlock_t state_lock;
 };
 
 /** Representation of OpenSBI Dynamic Domain */

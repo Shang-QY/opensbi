@@ -913,6 +913,37 @@ int sbi_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **outpu
 	return SBI_EINVAL;
 }
 
+/*******************************************************************************
+ * Set state of a Secure Partition context.
+ ******************************************************************************/
+void dd_state_set(struct dd_context *sp_ptr, int state)
+{
+	spin_lock(&(sp_ptr->state_lock));
+	sp_ptr->state = state;
+	spin_unlock(&(sp_ptr->state_lock));
+}
+
+/*******************************************************************************
+ * Wait until the state of a Secure Partition is the specified one and change it
+ * to the desired state.
+ ******************************************************************************/
+void dd_state_wait_switch(struct dd_context *sp_ptr, int from, int to)
+{
+	int success = 0;
+
+	while (success == 0) {
+		spin_lock(&(sp_ptr->state_lock));
+
+		if (sp_ptr->state == from) {
+			sp_ptr->state = to;
+
+			success = 1;
+		}
+
+		spin_unlock(&(sp_ptr->state_lock));
+	}
+}
+
 uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd)
 {
 	uint64_t rc;
@@ -921,6 +952,8 @@ uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd)
 
 	/* Switch to SP domain*/
     domain_switch(dd->dom);
+
+    // dd_state_wait_switch(ctx, DD_STATE_BUSY, DD_STATE_IDLE);
 
 	/* Save current CSR context and setup Secure Partition's CSR context */
 	save_restore_csr_context(ctx);
@@ -938,10 +971,6 @@ void sbi_dynamic_domain_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 {
     struct dd_context *ctx = dd->context;
 
-    if (ctx->state == DD_STATE_RESET) {
-        ctx->state = DD_STATE_IDLE;
-    }
-
 	/* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
 	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
@@ -958,6 +987,8 @@ void sbi_dynamic_domain_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 
 	/* Save Secure Partition's CSR context and restore original CSR context */
 	save_restore_csr_context(ctx);
+
+    dd_state_set(ctx, DD_STATE_IDLE);
 
 	/*
 	 * The DD manager must have initiated the original request through a
