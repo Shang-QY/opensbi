@@ -19,10 +19,11 @@
 #include <sbi/sbi_console.h>
 
 struct fdt_spm {
-	const struct fdt_match *match_table;
+	struct sbi_domain *dom;
 	int (*setup)(void *fdt, int nodeoff,
 			const struct fdt_match *match);
-	int (*spm_message_handler)(int srv_id,
+	int (*spm_message_handler)(struct sbi_rpxy_service_group *grp, 
+            struct sbi_rpxy_service *srv,
 			void *tx, u32 tx_len,
 			void *rx, u32 rx_len,
 			unsigned long *ack_len);
@@ -41,8 +42,6 @@ int fdt_spm_request_manager(void *fdt, int nodeoff, struct fdt_spm **out_manager
                                        (minor))
 #define MM_VERSION_COMPILED     MM_VERSION_FORM(MM_VERSION_MAJOR, \
                                                 MM_VERSION_MINOR)
-
-static struct sbi_domain *dom;
 
 struct efi_param_header {
 	uint8_t type;	/* type of the structure */
@@ -150,6 +149,8 @@ int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_domain **output_domai
 	return SBI_EINVAL;
 }
 
+struct fdt_spm fdt_spm_mm;
+
 /*
  * Initialize StandaloneMm SP context.
  */
@@ -157,22 +158,31 @@ int spm_mm_setup(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
 	int rc;
+    struct sbi_domain *dom;
 
 	rc = find_dynamic_domain(fdt, nodeoff, &dom);
 	if (rc) {
 		return SBI_EINVAL;
 	}
+    fdt_spm_mm.dom = dom;
 
 	set_mm_boot_info(dom->next_arg1);
 
 	return 0;
 }
 
-static int spm_message_handler_mm(int srv_id,
+static int spm_message_handler_mm(struct sbi_rpxy_service_group *grp, 
+                  struct sbi_rpxy_service *srv,
 				  void *tx, u32 tx_len,
 				  void *rx, u32 rx_len,
 				  unsigned long *ack_len)
 {
+    struct sbi_domain *dom = fdt_spm_mm.dom;
+    if (!dom)
+        return SBI_EINVAL;
+
+    int srv_id = srv->id;
+
 	if (RPMI_MM_SRV_MM_VERSION == srv_id) {
 		*((int32_t *)rx) = 0;
 		*((uint32_t *)(rx + sizeof(uint32_t))) = MM_VERSION_COMPILED;
@@ -184,104 +194,51 @@ static int spm_message_handler_mm(int srv_id,
 	return 0;
 }
 
-static const struct fdt_match fdt_spm_mm_match[] = {
-	{ .compatible = "riscv,rpmi-spm-mm" },
-	{ },
-};
-
 struct fdt_spm fdt_spm_mm = {
-	.match_table = fdt_spm_mm_match,
+	.dom = NULL,
 	.setup = spm_mm_setup,
 	.spm_message_handler = spm_message_handler_mm,
 };
-
-/* List of FDT SPM service group managers generated at compile time */
-struct fdt_spm *fdt_spm_service_groups[] = { &fdt_spm_mm };
-unsigned long fdt_spm_service_groups_size = sizeof(fdt_spm_service_groups) / sizeof(struct fdt_spm *);
-
-int fdt_spm_request_manager(void *fdt, int nodeoff, struct fdt_spm **out_manager)
-{
-	int pos;
-	struct fdt_spm *drv;
-
-	for (pos = 0; pos < fdt_spm_service_groups_size; pos++) {
-		drv = fdt_spm_service_groups[pos];
-
-		if (fdt_match_node(fdt, nodeoff, drv->match_table)) {
-			*out_manager = drv;
-			return SBI_SUCCESS;
-		}
-	}
-
-	/* Platforms have no message handler for this SPM instance */
-	return SBI_EFAIL;
-}
 
 struct rpxy_spm_data {
 	u32 service_group_id;
 	int num_services;
 	struct sbi_rpxy_service *services;
+    struct fdt_spm *srv_dispatcher;
 };
-
-struct rpxy_spm {
-	struct sbi_rpxy_service_group group;
-	struct fdt_spm *manager;
-};
-
-static int rpxy_spm_send_message(struct sbi_rpxy_service_group *grp,
-				  struct sbi_rpxy_service *srv,
-				  void *tx, u32 tx_len,
-				  void *rx, u32 rx_len,
-				  unsigned long *ack_len)
-{
-	int ret;
-	struct rpxy_spm *rspm = container_of(grp, struct rpxy_spm, group);
-
-	ret = rspm->manager->spm_message_handler(srv->id, tx, tx_len, rx, rx_len, ack_len);
-
-	return ret;
-}
 
 static int rpxy_spm_init(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
 	int rc;
-	struct rpxy_spm *rspm;
-	struct fdt_spm *manager;
+	struct sbi_rpxy_service_group *group;
 	const struct rpxy_spm_data *data = match->data;
+    const struct fdt_spm *dispatcher = data->srv_dispatcher;
 
 	/* Allocate context for RPXY mbox client */
-	rspm = sbi_zalloc(sizeof(*rspm));
-	if (!rspm)
+	group = sbi_zalloc(sizeof(*group));
+	if (!group)
 		return SBI_ENOMEM;
 
-	/* Request SPM service group manager */
-	rc = fdt_spm_request_manager(fdt, nodeoff, &manager);
-	if (rc) {
-		sbi_free(rspm);
-		return 0;
-	}
-
 	/* Setup SPM service group manager, initialize SP context */
-	rc = manager->setup(fdt, nodeoff, match);
+	rc = dispatcher->setup(fdt, nodeoff, match);
 	if (rc) {
-		sbi_free(rspm);
+		sbi_free(group);
 		return 0;
 	}
 
 	/* Setup RPXY spm client */
-	rspm->group.transport_id = 0;
-	rspm->group.service_group_id = data->service_group_id;
-	rspm->group.max_message_data_len = -1;
-	rspm->group.num_services = data->num_services;
-	rspm->group.services = data->services;
-	rspm->group.send_message = rpxy_spm_send_message;
-	rspm->manager = manager;
+	group->transport_id = 0;
+	group->service_group_id = data->service_group_id;
+	group->max_message_data_len = -1;
+	group->num_services = data->num_services;
+	group->services = data->services;
+	group->send_message = dispatcher->spm_message_handler;
 
 	/* Register RPXY service group */
-	rc = sbi_rpxy_register_service_group(&rspm->group);
+	rc = sbi_rpxy_register_service_group(group);
 	if (rc) {
-		sbi_free(rspm);
+		sbi_free(group);
 		return rc;
 	}
 
@@ -316,6 +273,7 @@ static struct rpxy_spm_data mm_data = {
 	.service_group_id = RPMI_SRVGRP_SPM_MM,
 	.num_services = array_size(mm_services),
 	.services = mm_services,
+    .srv_dispatcher = &fdt_spm_mm,
 };
 
 static const struct fdt_match rpxy_spm_match[] = {
