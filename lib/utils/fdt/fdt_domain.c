@@ -556,15 +556,15 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dd_offset,
 	sbi_domain_for_each(i, dom) {
 		if (!sbi_strcmp(dom->name, name)) {
 			dd->dom = dom;
-            break;
+			break;
 		}
 	}
 
-    /* Domain sanity checks, assigned HARTs mask should be empty */
-    sbi_hartmask_for_each_hartindex(i, &dd->dom->assigned_harts) {
-        err = SBI_EINVAL;
+	/* Domain sanity checks, assigned HARTs mask should be empty */
+	sbi_hartmask_for_each_hartindex(i, &dd->dom->assigned_harts) {
+		err = SBI_EINVAL;
 		goto fail_free;
-    }
+	}
 
 	/* Read "boot-order" DT property */
 	val32 = -1U;

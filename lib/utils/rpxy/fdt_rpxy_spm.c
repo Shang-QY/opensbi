@@ -110,8 +110,8 @@ void set_mm_boot_info(uint64_t a1)
 int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain)
 {
 	u32 i;
-    const u32 *val;
-    struct sbi_domain *dom;
+	const u32 *val;
+	struct sbi_domain *dom;
 	int domain_offset, len;
 	char name[64];
 
@@ -140,7 +140,7 @@ int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_domain **output_domai
 			sizeof(name));
 	name[sizeof(name) - 1] = '\0';
 
-    sbi_domain_for_each(i, dom) {
+	sbi_domain_for_each(i, dom) {
 		if (!sbi_strcmp(dom->name, name)) {
 			*output_domain = dom;
 			return SBI_SUCCESS;
@@ -160,7 +160,6 @@ int spm_mm_setup(void *fdt, int nodeoff,
 
 	rc = find_dynamic_domain(fdt, nodeoff, &dom);
 	if (rc) {
-        sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
 		return SBI_EINVAL;
 	}
 
