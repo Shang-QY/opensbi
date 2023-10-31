@@ -348,7 +348,7 @@ struct dd_context {
 	 * returning from a synchronous entry into Secure Partition.
 	 */
 	uintptr_t c_rt_ctx;
-	int state;
+	volatile int state;
     spinlock_t state_lock;
 };
 

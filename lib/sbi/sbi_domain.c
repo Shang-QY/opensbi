@@ -18,6 +18,7 @@
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_string.h>
 #include <sbi/sbi_hart.h>
+#include <sbi/riscv_barrier.h>
 
 /*
  * We allocate an extra element because sbi_domain_for_each() expects
@@ -923,34 +924,24 @@ static struct sbi_dynamic_domain *find_dynamic_domain(u32 domain_index)
 	return NULL;
 }
 
-/*******************************************************************************
- * Set state of a Secure Partition context.
- ******************************************************************************/
-void dd_state_set(struct dd_context *sp_ptr, int state)
+void dd_state_set(struct dd_context *ctx, int state)
 {
-	spin_lock(&(sp_ptr->state_lock));
-	sp_ptr->state = state;
-	spin_unlock(&(sp_ptr->state_lock));
+	spin_lock(&(ctx->state_lock));
+	ctx->state = state;
+	spin_unlock(&(ctx->state_lock));
 }
 
-/*******************************************************************************
- * Wait until the state of a Secure Partition is the specified one and change it
- * to the desired state.
- ******************************************************************************/
-void dd_state_wait_switch(struct dd_context *sp_ptr, int from, int to)
+void dd_state_wait_switch(struct dd_context *ctx, int from, int to)
 {
 	int success = 0;
-
 	while (success == 0) {
-		spin_lock(&(sp_ptr->state_lock));
+		spin_lock(&(ctx->state_lock));
 
-		if (sp_ptr->state == from) {
-			sp_ptr->state = to;
-
+		if (ctx->state == from) {
+			ctx->state = to;
 			success = 1;
 		}
-
-		spin_unlock(&(sp_ptr->state_lock));
+		spin_unlock(&(ctx->state_lock));
 	}
 }
 
@@ -999,9 +990,11 @@ void sbi_dynamic_domain_exit(uint64_t rc)
 
 int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
 {
-	int rc;
+	int rc, prev_state;
+    // int rc;
     unsigned long val;
     u32 i = current_hartid();
+    struct sbi_dynamic_domain *prev_dd;
     struct sbi_domain *dom;
     struct dd_context *ctx;
 
@@ -1014,8 +1007,14 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
     }
 
     /* Wait for the previous DD initialization to complete */
-    // prev_dd_ctx = 
-    // while 
+    if (dd->head.prev != &dynamic_domain_list) {
+        prev_dd = container_of(dd->head.prev,
+                           struct sbi_dynamic_domain, head);
+        do {                                          \
+            prev_state = prev_dd->context->state; \
+            rmb();                                \
+        } while (prev_state != DD_STATE_IDLE);
+    }
 
     /* Initialize context for dynamic domain */
     val = csr_read(CSR_MSTATUS);
@@ -1064,10 +1063,14 @@ int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot)
 {
 	int rc;
 	struct sbi_dynamic_domain *dd;
+    // struct sbi_domain *dom = sbi_domain_thishart_ptr();
 
 	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
         if ((rc = dynamic_domain_init(dd, cold_boot)))
 			return rc;
+
+    /* Restore original domain */
+	// domain_switch(dom);
 
 	return 0;
 }
