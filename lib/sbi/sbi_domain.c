@@ -849,9 +849,9 @@ static void domain_switch(struct sbi_domain *target_dom)
 
 int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
 {
-	u32 i;
+	// u32 i;
     bool inserted = false;
-    unsigned long val;
+    // unsigned long val;
 	struct sbi_dynamic_domain *tdd;
 
 	/* Sanity checks */
@@ -875,26 +875,26 @@ int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
     if (!inserted)
         sbi_list_add_tail(&dd->head, &dynamic_domain_list);
 
-	/* Initialize context for dynamic domain */
-    val = csr_read(CSR_MSTATUS);
-    val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
-    val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+	// /* Initialize context for dynamic domain */
+    // val = csr_read(CSR_MSTATUS);
+    // val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
+    // val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
 
-    for (i = 0; i < dd->excution_ctx_count; ++i) {
-        /* Setup secure M-mode CSR context */
-        dd->context[i].regs.mstatus = val;
-        dd->context[i].regs.mepc = dd->dom->next_addr;
+    // for (i = 0; i < dd->excution_ctx_count; ++i) {
+    //     /* Setup secure M-mode CSR context */
+    //     dd->context[i].regs.mstatus = val;
+    //     dd->context[i].regs.mepc = dd->dom->next_addr;
 
-        /* Setup secure S-mode CSR context */
-        dd->context[i].csr_stvec = dd->dom->next_addr;
-        dd->context[i].csr_sscratch = 0;
-        dd->context[i].csr_sie = 0;
-        dd->context[i].csr_satp = 0;
+    //     /* Setup secure S-mode CSR context */
+    //     dd->context[i].csr_stvec = dd->dom->next_addr;
+    //     dd->context[i].csr_sscratch = 0;
+    //     dd->context[i].csr_sie = 0;
+    //     dd->context[i].csr_satp = 0;
 
-        /* Setup boot arguments */
-        dd->context[i].regs.a0 = current_hartid();
-        dd->context[i].regs.a1 = dd->dom->next_arg1;
-    }
+    //     /* Setup boot arguments */
+    //     dd->context[i].regs.a0 = current_hartid();
+    //     dd->context[i].regs.a1 = dd->dom->next_arg1;
+    // }
 
 	return 0;
 }
@@ -998,22 +998,91 @@ void sbi_dynamic_domain_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
 	domain_exit_helper(ctx->c_rt_ctx, rc);
 }
 
+
+int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
+{
+	int rc;
+    unsigned long val;
+    u32 i = current_hartid();
+    struct dd_context *ctx;
+
+    if (dd->excution_ctx_count == 1) {
+        if (!cold_boot)
+            return 0;
+        ctx = dd->context;
+    } else {
+        ctx = &dd->context[i];
+    }
+
+    /* Wait for the previous DD initialization to complete */
+    // prev_dd_ctx = 
+    // while 
+
+    // /* Switch to DD domain */
+    // domain_switch(dd->dom);
+
+    /* Initialize context for dynamic domain */
+    val = csr_read(CSR_MSTATUS);
+    val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
+    val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+
+    /* Setup secure M-mode CSR context */
+    ctx->regs.mstatus = val;
+    ctx->regs.mepc = dd->dom->next_addr;
+
+    /* Setup secure S-mode CSR context */
+    ctx->csr_stvec = dd->dom->next_addr;
+    ctx->csr_sscratch = 0;
+    ctx->csr_sie = 0;
+    ctx->csr_satp = 0;
+
+    /* Setup boot arguments */
+    ctx->regs.a0 = current_hartid();
+    ctx->regs.a1 = dd->dom->next_arg1;
+
+    /* clear pending interrupts */
+    csr_read_clear(CSR_MIP, MIP_MTIP);
+    csr_read_clear(CSR_MIP, MIP_STIP);
+    csr_read_clear(CSR_MIP, MIP_SSIP);
+    csr_read_clear(CSR_MIP, MIP_SEIP);
+
+    __asm__ __volatile__("sfence.vma" : : : "memory");
+
+    struct sbi_domain *dom = sbi_domain_thishart_ptr();
+    /* Switch to DD domain */
+    domain_switch(dd->dom);
+
+    /* Save current CSR context and setup Secure Partition's CSR context */
+	save_restore_csr_context(ctx);
+
+	/* Enter Secure Partition */
+	rc = domain_enter_helper(&ctx->regs, &ctx->c_rt_ctx);
+    if (rc)
+        return rc;
+
+    /* Restore original domain */
+    sbi_printf("[shangqy debug] dynamic_domain_init :domain_switch: dom: %p\n", dom);
+    // sbi_printf("[shangqy debug] dynamic_domain_init :domain_switch: dom: \n");
+
+	// domain_switch(dom);
+    // dd_state_set(ctx, DD_STATE_IDLE);
+
+    return 0;
+}
+
 int sbi_dynamic_domain_init(struct sbi_scratch *scratch)
 {
 	int rc;
 	struct sbi_dynamic_domain *dd;
+    struct sbi_domain *dom = sbi_domain_thishart_ptr();
 
-	sbi_list_for_each_entry(dd, &dynamic_domain_list, head) {
-        /* clear pending interrupts */
-        csr_read_clear(CSR_MIP, MIP_MTIP);
-        csr_read_clear(CSR_MIP, MIP_STIP);
-        csr_read_clear(CSR_MIP, MIP_SSIP);
-        csr_read_clear(CSR_MIP, MIP_SEIP);
-
-        __asm__ __volatile__("sfence.vma" : : : "memory");
-
-        if (sbi_dynamic_domain_entry(dd))
+	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
+        if ((rc = dynamic_domain_init(dd, true)))
 			return rc;
-    }
+
+    // sbi_printf("[shangqy debug] sbi_dynamic_domain_init :domain_switch: dom: %p\n", dom);
+	/* Restore original domain */
+	domain_switch(dom);
+
 	return 0;
 }
