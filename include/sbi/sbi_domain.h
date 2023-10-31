@@ -390,7 +390,7 @@ int sbi_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **outpu
  * @return 0 on success
  * @return other values decided by DD if it encounters errors
  */
-uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd);
+uint64_t sbi_dynamic_domain_entry(u32 domain_index);
 
 /**
  * This function returns to the place where sbi_dynamic_domain_entry() was
@@ -398,9 +398,9 @@ uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd);
  * @param ctx pointer to DD context
  * @param rc the return value for the original entry call
  */
-void sbi_dynamic_domain_exit(struct sbi_dynamic_domain *dd, uint64_t rc);
+void sbi_dynamic_domain_exit(uint64_t rc);
 
 /** Initialize dynamic domains */
-int sbi_dynamic_domain_init(struct sbi_scratch *scratch);
+int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot);
 
 #endif

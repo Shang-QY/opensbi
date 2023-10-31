@@ -8,7 +8,7 @@
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_scratch.h>
 	.align 3
-	.global domain_enter_helper
+	.global context_enter_helper
 
 	/* ---------------------------------------------------------------------
 	 * This function is called with M-mode runtime stack. Here we stash our
@@ -18,7 +18,7 @@
 	 *  runtime context is to be saved.
 	 * ---------------------------------------------------------------------
 	 */
-domain_enter_helper:
+context_enter_helper:
 	/* Make space for the registers that we're going to save */
 	REG_S   sp, 0(a1)
 	add	sp, sp, -(SBI_TRAP_REGS_SIZE)
@@ -69,17 +69,17 @@ domain_enter_helper:
 	call	_trap_exit
 
 	.align 3
-	.global domain_exit_helper
+	.global context_exit_helper
 	/* ---------------------------------------------------------------------
 	 * This function is called with 'x0' pointing to a C runtime context
-	 * saved in domain_enter_helper().
+	 * saved in context_enter_helper().
 	 * It restores the saved registers and jumps to that runtime with 'x0'
 	 * as the new SP register. This destroys the C runtime context that had
 	 * been built on the stack below the saved context by the caller. Later
 	 * the second parameter 'x1' is passed as a return value to the caller.
 	 * ---------------------------------------------------------------------
 	 */
-domain_exit_helper:
+context_exit_helper:
 	/* Restore the previous stack */
 	add	sp, a0, 0
 
@@ -115,7 +115,7 @@ domain_exit_helper:
 
 	/* ---------------------------------------------------------------------
 	 * This should take us back to the instruction after the call to the
-	 * last domain_enter_helper().* Place the second parameter to a0
+	 * last context_enter_helper().* Place the second parameter to a0
 	 * so that the caller will see it as a return value from the original
 	 * entry call.
 	 * ---------------------------------------------------------------------
