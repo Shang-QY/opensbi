@@ -965,20 +965,20 @@ uint64_t sbi_dynamic_domain_entry(u32 domain_index)
     if (!dd)
         return SBI_EINVAL;
 
+    ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
+
+    dd_state_wait_switch(ctx, DD_STATE_IDLE, DD_STATE_BUSY);
+
 	/* Switch to DD domain*/
     domain_switch(dd->dom);
 
-    ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
-
-    dd_state_wait_switch(ctx, DD_STATE_BUSY, DD_STATE_IDLE);
-
     rc = dynamic_domain_context_entry(ctx);
-
-    if (!rc)
-		dd_state_set(ctx, DD_STATE_IDLE);
 
 	/* Restore original domain */
 	domain_switch(dom);
+
+    if (!rc)
+		dd_state_set(ctx, DD_STATE_IDLE);
 
 	return rc;
 }
@@ -1051,7 +1051,8 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
     if ((rc = dynamic_domain_context_entry(ctx)) != 0)
         return rc;
 
-    domain_switch(dom);
+    /* Restore original domain */
+	domain_switch(dom);
 
     dd_state_set(ctx, DD_STATE_IDLE);
 
@@ -1065,7 +1066,7 @@ int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot)
     struct sbi_domain *dom = sbi_domain_thishart_ptr();
 
 	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
-        if ((rc = dynamic_domain_init(dd, cold_boot)) != 0)
+        if ((rc = dynamic_domain_init(dd, cold_boot)))
 			return rc;
 
 	/* Restore original domain */
