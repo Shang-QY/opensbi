@@ -395,6 +395,8 @@ static void __noreturn init_coldboot(struct sbi_scratch *scratch, u32 hartid)
 
 	sbi_boot_print_hart(scratch, hartid);
 
+	sbi_dynamic_domain_init(scratch, true);
+
 	/*
 	 * Configure PMP at last because if SMEPMP is detected,
 	 * M-mode access to the S/U space will be rescinded.
