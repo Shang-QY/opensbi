@@ -12,6 +12,7 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_trap.h>
 
 struct sbi_scratch;
 
@@ -324,5 +325,29 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
+
+enum dd_state {
+	DD_STATE_RESET = 0,
+	DD_STATE_IDLE,
+	DD_STATE_BUSY
+};
+
+/** Representation of Dynamic Domain context */
+struct dd_context {
+	/** secure context for all general registers */
+	struct sbi_trap_regs regs;
+	/** secure context for S mode CSR registers */
+	uint64_t csr_stvec;
+	uint64_t csr_sscratch;
+	uint64_t csr_sie;
+	uint64_t csr_satp;
+	/**
+	 * stack address to restore C runtime context from after
+	 * returning from a synchronous entry into Secure Partition.
+	 */
+	uintptr_t c_rt_ctx;
+	volatile int state;
+	spinlock_t state_lock;
+};
 
 #endif
