@@ -7,16 +7,11 @@
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_rpxy.h>
-#include <sbi/sbi_domain.h>
 #include <libfdt.h>
-
-#include <sbi_utils/rpxy/fdt_rpxy.h>
-#include <sbi/sbi_console.h>
-#include <sbi/riscv_asm.h>
-#include <sbi/sbi_bitops.h>
 #include <sbi_utils/fdt/fdt_helper.h>
+#include <sbi_utils/rpxy/fdt_rpxy.h>
+#include <sbi/sbi_domain.h>
 #include <sbi_utils/mailbox/rpmi_msgprot.h>
-#include <sbi/sbi_console.h>
 
 struct ddm_rpxy_dispatcher {
 	struct sbi_domain *dom;
