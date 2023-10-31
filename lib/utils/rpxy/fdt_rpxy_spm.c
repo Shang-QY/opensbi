@@ -55,19 +55,19 @@ struct efi_secure_partition_cpu_info {
 
 struct efi_secure_partition_boot_info {
 	struct efi_param_header header;
-	uint64_t sp_mem_base;
-	uint64_t sp_mem_limit;
-	uint64_t sp_image_base;
-	uint64_t sp_stack_base;
-	uint64_t sp_heap_base;
-	uint64_t sp_ns_comm_buf_base;
-	uint64_t sp_shared_buf_base;
-	uint64_t sp_image_size;
-	uint64_t sp_pcpu_stack_size;
-	uint64_t sp_heap_size;
-	uint64_t sp_ns_comm_buf_size;
-	uint64_t sp_shared_buf_size;
-	uint32_t num_sp_mem_region;
+	uint64_t dd_mem_base;
+	uint64_t dd_mem_limit;
+	uint64_t dd_image_base;
+	uint64_t dd_stack_base;
+	uint64_t dd_heap_base;
+	uint64_t dd_ns_comm_buf_base;
+	uint64_t dd_shared_buf_base;
+	uint64_t dd_image_size;
+	uint64_t dd_pcpu_stack_size;
+	uint64_t dd_heap_size;
+	uint64_t dd_ns_comm_buf_size;
+	uint64_t dd_shared_buf_size;
+	uint32_t num_dd_mem_region;
 	uint32_t num_cpus;
 	struct efi_secure_partition_cpu_info *cpu_info;
 };
@@ -83,20 +83,20 @@ static void mm_setup_boot_info(uint64_t a1)
     struct efi_secure_partition_boot_info *mm_boot_info =
                             &mm_shared_buffer->mm_payload_boot_info;
 	mm_boot_info->header.version = 0x01;
-	mm_boot_info->sp_mem_base	= 0x80C00000;
-	mm_boot_info->sp_mem_limit	= 0x82000000;
-	mm_boot_info->sp_image_base = 0x80C00000;
-    /* Stack from (sp_heap_base + sp_heap_size) to sp_shared_buf_base */
-	mm_boot_info->sp_stack_base = 0x81F7FFFF;
-	mm_boot_info->sp_heap_base = 0x80F00000;
-	mm_boot_info->sp_ns_comm_buf_base = 0xFFE00000;
-	mm_boot_info->sp_shared_buf_base = 0x81F80000;
-	mm_boot_info->sp_image_size	 = 0x300000;
-	mm_boot_info->sp_pcpu_stack_size = 0x10000;
-	mm_boot_info->sp_heap_size	 = 0x800000;
-	mm_boot_info->sp_ns_comm_buf_size = 0x200000;
-	mm_boot_info->sp_shared_buf_size = 0x80000;
-	mm_boot_info->num_sp_mem_region = 0x6;
+	mm_boot_info->dd_mem_base	= 0x80C00000;
+	mm_boot_info->dd_mem_limit	= 0x82000000;
+	mm_boot_info->dd_image_base = 0x80C00000;
+    /* Stack from (dd_heap_base + dd_heap_size) to dd_shared_buf_base */
+	mm_boot_info->dd_stack_base = 0x81F7FFFF;
+	mm_boot_info->dd_heap_base = 0x80F00000;
+	mm_boot_info->dd_ns_comm_buf_base = 0xFFE00000;
+	mm_boot_info->dd_shared_buf_base = 0x81F80000;
+	mm_boot_info->dd_image_size	 = 0x300000;
+	mm_boot_info->dd_pcpu_stack_size = 0x10000;
+	mm_boot_info->dd_heap_size	 = 0x800000;
+	mm_boot_info->dd_ns_comm_buf_size = 0x200000;
+	mm_boot_info->dd_shared_buf_size = 0x80000;
+	mm_boot_info->num_dd_mem_region = 0x6;
 	mm_boot_info->num_cpus	 = 1;
 	mm_shared_buffer->mm_cpu_info[0].linear_id		 = 0;
 	mm_shared_buffer->mm_cpu_info[0].flags		 = 0;
@@ -139,9 +139,6 @@ int find_domain(void *fdt, int nodeoff, const char *compatible,
 
 struct ddm_rpxy_dispatcher mm_dispatcher;
 
-/*
- * Initialize StandaloneMm SP context.
- */
 int ddm_mm_setup(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
@@ -198,14 +195,14 @@ static int rpxy_ddm_init(void *fdt, int nodeoff,
 	if (!group)
 		return SBI_ENOMEM;
 
-	/* Setup SPM service group manager, initialize SP context */
+	/* Setup DDM service group dispatcher */
 	rc = dispatcher->setup(fdt, nodeoff, match);
 	if (rc) {
 		sbi_free(group);
 		return 0;
 	}
 
-	/* Setup RPXY spm client */
+	/* Setup RPXY service group */
 	group->transport_id = 0;
 	group->service_group_id = data->service_group_id;
 	group->max_message_data_len = -1;
@@ -248,14 +245,14 @@ static struct sbi_rpxy_service mm_services[] = {
 };
 
 static struct rpxy_ddm_data mm_data = {
-	.service_group_id = RPMI_SRVGRP_SPM_MM,
+	.service_group_id = RPMI_SRVGRP_DDM_MM,
 	.num_services = array_size(mm_services),
 	.services = mm_services,
     .srv_dispatcher = &mm_dispatcher,
 };
 
 static const struct fdt_match rpxy_ddm_match[] = {
-	{ .compatible = "riscv,rpmi-spm-mm", .data = &mm_data }, 
+	{ .compatible = "riscv,rpmi-ddm-mm", .data = &mm_data }, 
 	{},
 };
 
