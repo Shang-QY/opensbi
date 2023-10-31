@@ -1019,7 +1019,7 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
     // while 
 
     // /* Switch to DD domain */
-    // domain_switch(dd->dom);
+    domain_switch(dd->dom);
 
     /* Initialize context for dynamic domain */
     val = csr_read(CSR_MSTATUS);
@@ -1050,7 +1050,7 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
 
     struct sbi_domain *dom = sbi_domain_thishart_ptr();
     /* Switch to DD domain */
-    domain_switch(dd->dom);
+    // domain_switch(dd->dom);
 
     /* Save current CSR context and setup Secure Partition's CSR context */
 	save_restore_csr_context(ctx);
