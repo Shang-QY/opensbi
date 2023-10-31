@@ -18,11 +18,11 @@
 #include <sbi_utils/mailbox/rpmi_msgprot.h>
 #include <sbi/sbi_console.h>
 
-struct fdt_spm {
+struct ddm_rpxy_dispatcher {
 	struct sbi_domain *dom;
 	int (*setup)(void *fdt, int nodeoff,
 			const struct fdt_match *match);
-	int (*spm_message_handler)(struct sbi_rpxy_service_group *grp, 
+	int (*dispatch)(struct sbi_rpxy_service_group *grp, 
             struct sbi_rpxy_service *srv,
 			void *tx, u32 tx_len,
 			void *rx, u32 rx_len,
@@ -77,14 +77,15 @@ struct efi_secure_shared_buffer {
 	struct efi_secure_partition_cpu_info mm_cpu_info[1];
 };
 
-void set_mm_boot_info(uint64_t a1)
+static void mm_setup_boot_info(uint64_t a1)
 {
-	struct efi_secure_shared_buffer *mm_shared_buffer = (struct efi_secure_shared_buffer *)a1;
+	struct efi_secure_shared_buffer *mm_shared_buffer =
+                                (struct efi_secure_shared_buffer *)a1;
 
 	mm_shared_buffer->mm_payload_boot_info.header.version = 0x01;
 	mm_shared_buffer->mm_payload_boot_info.sp_mem_base	= 0x80C00000;
 	mm_shared_buffer->mm_payload_boot_info.sp_mem_limit	= 0x82000000;
-	mm_shared_buffer->mm_payload_boot_info.sp_image_base = 0x80C00000; // sp_mem_base
+	mm_shared_buffer->mm_payload_boot_info.sp_image_base = 0x80C00000;
 	mm_shared_buffer->mm_payload_boot_info.sp_stack_base =
 		0x81FFFFFF; // sp_heap_base + sp_heap_size + SpStackSize
 	mm_shared_buffer->mm_payload_boot_info.sp_heap_base =
@@ -137,23 +138,23 @@ int find_domain(void *fdt, int nodeoff, const char *compatible,
 	return SBI_EINVAL;
 }
 
-struct fdt_spm fdt_spm_mm;
+struct ddm_rpxy_dispatcher mm_dispatcher;
 
 /*
  * Initialize StandaloneMm SP context.
  */
-int spm_mm_setup(void *fdt, int nodeoff,
+int ddm_mm_setup(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
-	if (find_domain(fdt, nodeoff, "opensbi-domain-instance", &fdt_spm_mm.dom))
+	if (find_domain(fdt, nodeoff, "opensbi-domain-instance", &mm_dispatcher.dom))
 		return SBI_EINVAL;
 
-	set_mm_boot_info(fdt_spm_mm.dom->next_arg1);
+	mm_setup_boot_info(mm_dispatcher.dom->next_arg1);
 
 	return 0;
 }
 
-static int spm_message_handler_mm(struct sbi_rpxy_service_group *grp, 
+static int ddm_mm_dispatch(struct sbi_rpxy_service_group *grp, 
                   struct sbi_rpxy_service *srv,
 				  void *tx, u32 tx_len,
 				  void *rx, u32 rx_len,
@@ -165,33 +166,33 @@ static int spm_message_handler_mm(struct sbi_rpxy_service_group *grp,
 		*((int32_t *)rx) = 0;
 		*((uint32_t *)(rx + sizeof(uint32_t))) = MM_VERSION_COMPILED;
 	} else if (RPMI_MM_SRV_MM_COMMUNICATE == srv_id) {
-		sbi_dynamic_domain_entry(fdt_spm_mm.dom->index);
+		sbi_dynamic_domain_entry(mm_dispatcher.dom->index);
 	} else if (RPMI_MM_SRV_MM_COMPLETE == srv_id) {
 		sbi_dynamic_domain_exit(0);
 	}
 	return 0;
 }
 
-struct fdt_spm fdt_spm_mm = {
+struct ddm_rpxy_dispatcher mm_dispatcher = {
 	.dom = NULL,
-	.setup = spm_mm_setup,
-	.spm_message_handler = spm_message_handler_mm,
+	.setup = ddm_mm_setup,
+	.dispatch = ddm_mm_dispatch,
 };
 
-struct rpxy_spm_data {
+struct rpxy_ddm_data {
 	u32 service_group_id;
 	int num_services;
 	struct sbi_rpxy_service *services;
-    struct fdt_spm *srv_dispatcher;
+    struct ddm_rpxy_dispatcher *srv_dispatcher;
 };
 
-static int rpxy_spm_init(void *fdt, int nodeoff,
+static int rpxy_ddm_init(void *fdt, int nodeoff,
 			  const struct fdt_match *match)
 {
 	int rc;
 	struct sbi_rpxy_service_group *group;
-	const struct rpxy_spm_data *data = match->data;
-    const struct fdt_spm *dispatcher = data->srv_dispatcher;
+	const struct rpxy_ddm_data *data = match->data;
+    const struct ddm_rpxy_dispatcher *dispatcher = data->srv_dispatcher;
 
 	/* Allocate context for RPXY mbox client */
 	group = sbi_zalloc(sizeof(*group));
@@ -211,7 +212,7 @@ static int rpxy_spm_init(void *fdt, int nodeoff,
 	group->max_message_data_len = -1;
 	group->num_services = data->num_services;
 	group->services = data->services;
-	group->send_message = dispatcher->spm_message_handler;
+	group->send_message = dispatcher->dispatch;
 
 	/* Register RPXY service group */
 	rc = sbi_rpxy_register_service_group(group);
@@ -247,19 +248,19 @@ static struct sbi_rpxy_service mm_services[] = {
 },
 };
 
-static struct rpxy_spm_data mm_data = {
+static struct rpxy_ddm_data mm_data = {
 	.service_group_id = RPMI_SRVGRP_SPM_MM,
 	.num_services = array_size(mm_services),
 	.services = mm_services,
-    .srv_dispatcher = &fdt_spm_mm,
+    .srv_dispatcher = &mm_dispatcher,
 };
 
-static const struct fdt_match rpxy_spm_match[] = {
+static const struct fdt_match rpxy_ddm_match[] = {
 	{ .compatible = "riscv,rpmi-spm-mm", .data = &mm_data }, 
 	{},
 };
 
 struct fdt_rpxy fdt_rpxy_ddm = {
-	.match_table = rpxy_spm_match,
-	.init = rpxy_spm_init,
+	.match_table = rpxy_ddm_match,
+	.init = rpxy_ddm_init,
 };
