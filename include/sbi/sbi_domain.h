@@ -13,6 +13,8 @@
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_list.h>
+#include <sbi/riscv_locks.h>
 
 struct sbi_scratch;
 
@@ -349,5 +351,47 @@ struct dd_context {
 	volatile int state;
 	spinlock_t state_lock;
 };
+
+/** Representation of OpenSBI Dynamic Domain */
+struct sbi_dynamic_domain {
+	/** List head to a set of service groups */
+	struct sbi_dlist head;
+
+	/** OpenSBI domain in which Secure Partition runs */
+	struct sbi_domain *dom;
+
+	u32 boot_order;
+	u32 excution_ctx_count;
+	struct dd_context *context;
+};
+
+/**
+ * Register a new domain
+ * @param dom pointer to domain
+ * @param assign_mask pointer to HART mask of HARTs assigned to the domain
+ *
+ * @return 0 on success and negative error code on failure
+ */
+int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd);
+
+/**
+ * This function takes an DD context pointer and performs a synchronous
+ * entry into it.
+ * @param ctx pointer to DD context
+ * @return 0 on success
+ * @return other values decided by DD if it encounters errors
+ */
+uint64_t sbi_dynamic_domain_entry(u32 domain_index);
+
+/**
+ * This function returns to the place where sbi_dynamic_domain_entry() was
+ * called originally.
+ * @param ctx pointer to DD context
+ * @param rc the return value for the original entry call
+ */
+void sbi_dynamic_domain_exit(uint64_t rc);
+
+/** Initialize dynamic domains */
+int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot);
 
 #endif
