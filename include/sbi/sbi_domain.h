@@ -13,6 +13,8 @@
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_trap.h>
+#include <sbi/sbi_list.h>
+#include <sbi/riscv_locks.h>
 
 struct sbi_scratch;
 
@@ -160,6 +162,24 @@ struct sbi_domain_memregion {
 /** Maximum number of domains */
 #define SBI_DOMAIN_MAX_INDEX			32
 
+/** Representation of Dynamic Domain context */
+struct sbi_domain_context {
+	/** secure context for all general registers */
+	struct sbi_trap_regs regs;
+	/** secure context for S mode CSR registers */
+	uint64_t csr_stvec;
+	uint64_t csr_sscratch;
+	uint64_t csr_sie;
+	uint64_t csr_satp;
+	/**
+	 * stack address to restore C runtime context from after
+	 * returning from a synchronous entry into Secure Partition.
+	 */
+	uintptr_t c_rt_ctx;
+	volatile int state;
+	spinlock_t state_lock;
+};
+
 /** Representation of OpenSBI domain */
 struct sbi_domain {
 	/**
@@ -187,6 +207,10 @@ struct sbi_domain {
 	unsigned long next_addr;
 	/** Privilege mode of next booting stage for this domain */
 	unsigned long next_mode;
+	/** Is domain allowed reentrant */
+	bool reentrant;
+	/** Next reentrant context for this the domain */
+	struct sbi_domain_ctx *next_ctx;
 	/** Is domain allowed to reset the system */
 	bool system_reset_allowed;
 	/** Is domain allowed to suspend the system */
@@ -326,18 +350,21 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
 
+/**
+ * This function takes an context pointer and performs a synchronous
+ * entry into it.
+ * @param ctx pointer to domain context
+ * @return 0 on success
+ * @return other values if it encounters errors
+ */
+uint64_t sbi_domain_suspend(u32 domain_index);
 
-/** Representation of OpenSBI Dynamic Domain */
-struct sbi_dynamic_domain {
-	/** List head to a set of service groups */
-	struct sbi_dlist head;
-
-	/** OpenSBI domain in which Secure Partition runs */
-	struct sbi_domain *dom;
-
-	u32 boot_order;
-	u32 excution_ctx_count;
-	struct dd_context *context;
-};
+/**
+ * This function returns to the place where sbi_domain_resume() was
+ * called originally.
+ * @param ctx pointer to domain context
+ * @param rc the return value for the original entry call
+ */
+void sbi_domain_resume(uint64_t rc);
 
 #endif

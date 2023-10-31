@@ -17,6 +17,8 @@
 #include <sbi/sbi_platform.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_string.h>
+#include <sbi/sbi_hart.h>
+#include <sbi/riscv_barrier.h>
 
 /*
  * We allocate an extra element because sbi_domain_for_each() expects
@@ -555,6 +557,9 @@ int sbi_domain_register(struct sbi_domain *dom,
 			dom->boot_hartid = cold_hartid;
 		}
 	}
+	if(dom->reentrant) {
+		dom->next_ctx = sbi_calloc(sizeof(struct sbi_domain_context), 1);
+	}
 
 	return 0;
 }
@@ -874,3 +879,135 @@ static void domain_switch(struct sbi_domain *target_dom)
 	}
 	sbi_hart_pmp_configure(scratch);
 }
+
+uint64_t sbi_domain_suspend(u32 domain_index)
+{
+#if 0
+	uint64_t rc;
+	u32 i = current_hartid();
+	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+	struct sbi_dynamic_domain *dd = find_dynamic_domain(domain_index);
+	struct dd_context *ctx;
+
+	if (!dd)
+		return SBI_EINVAL;
+
+	ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
+
+	dd_state_wait_switch(ctx, DD_STATE_IDLE, DD_STATE_BUSY);
+
+	/* Switch to DD domain*/
+	domain_switch(dd->dom);
+
+	rc = dynamic_domain_context_entry(ctx);
+
+	/* Restore original domain */
+	domain_switch(dom);
+
+	if (!rc)
+		dd_state_set(ctx, DD_STATE_IDLE);
+
+	return rc;
+#endif	
+}
+
+void sbi_domain_resume(uint64_t rc)
+{
+#if 0
+	u32 i = current_hartid();
+	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+	struct sbi_dynamic_domain *dd = find_dynamic_domain(dom->index);
+	struct dd_context *ctx;
+
+	if (!dd)
+		return;
+
+	ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
+	dynamic_domain_context_exit(ctx, rc);
+#endif	
+}
+
+#if 0
+TBD in sbi_domain_finalize ?? And use domidx_to_domain_table
+int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
+{
+	int rc, prev_state;
+	unsigned long val;
+	u32 i = current_hartid();
+	struct sbi_dynamic_domain *prev_dd;
+	struct sbi_domain *dom;
+	struct dd_context *ctx;
+
+	if (dd->excution_ctx_count == 1) {
+		if (!cold_boot)
+			return 0;
+		ctx = dd->context;
+	} else {
+		ctx = &dd->context[i];
+	}
+
+	/* Wait for the previous DD initialization to complete */
+	if (dd->head.prev != &dynamic_domain_list) {
+		prev_dd = container_of(dd->head.prev,
+						   struct sbi_dynamic_domain, head);
+		do {										  \
+			prev_state = prev_dd->context->state; \
+			rmb();								\
+		} while (prev_state != DD_STATE_IDLE);
+	}
+
+	/* Initialize context for dynamic domain */
+	val = csr_read(CSR_MSTATUS);
+	val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
+	val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+
+	/* Setup secure M-mode CSR context */
+	ctx->regs.mstatus = val;
+	ctx->regs.mepc = dd->dom->next_addr;
+
+	/* Setup secure S-mode CSR context */
+	ctx->csr_stvec = dd->dom->next_addr;
+	ctx->csr_sscratch = 0;
+	ctx->csr_sie = 0;
+	ctx->csr_satp = 0;
+
+	/* Setup boot arguments */
+	ctx->regs.a0 = current_hartid();
+	ctx->regs.a1 = dd->dom->next_arg1;
+
+	/* clear pending interrupts */
+	csr_read_clear(CSR_MIP, MIP_MTIP);
+	csr_read_clear(CSR_MIP, MIP_STIP);
+	csr_read_clear(CSR_MIP, MIP_SSIP);
+	csr_read_clear(CSR_MIP, MIP_SEIP);
+
+	__asm__ __volatile__("sfence.vma" : : : "memory");
+
+	dom = sbi_domain_thishart_ptr();
+
+	/* Switch to DD domain */
+	domain_switch(dd->dom);
+
+	if ((rc = dynamic_domain_context_entry(ctx)) != 0)
+		return rc;
+
+	/* Restore original domain */
+	domain_switch(dom);
+
+	dd_state_set(ctx, DD_STATE_IDLE);
+
+	return 0;
+}
+
+int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot)
+{
+	int rc;
+	struct sbi_dynamic_domain *dd;
+
+	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
+		if ((rc = dynamic_domain_init(dd, cold_boot)))
+			return rc;
+
+	return 0;
+}
+#endif

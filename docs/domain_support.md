@@ -245,6 +245,12 @@ be done:
                 order = <20>;
             };
 
+            stmm_mem: stmm_mem {
+                compatible = "opensbi,domain,memregion";
+                base = <0x0 0x80C00000>;
+                order = <20>;
+            };
+
             tuart: tuart {
                 compatible = "opensbi,domain,memregion";
                 base = <0x0 0x10011000>;
@@ -269,6 +275,17 @@ be done:
                 next-mode = <0x0>;
                 system-reset-allowed;
                 system-suspend-allowed;
+            };]
+
+            mmdomain: standalonemm-domain {
+                compatible = "opensbi,domain,instance";
+		regions = <&stmm_mem 0x3f>;
+		next-arg1 = <0x0 0x80C80000>;
+		next-addr = <0x0 0x80C00000>;
+		next-mode = <0x1>;
+		system-reset-allowed;
+                system-suspend-allowed;
+                reentrant;
             };
 
             udomain: untrusted-domain {
