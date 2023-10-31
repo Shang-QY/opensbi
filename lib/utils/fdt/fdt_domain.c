@@ -13,6 +13,7 @@
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_platform.h>
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi_utils/fdt/fdt_domain.h>
@@ -294,6 +295,7 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 	struct parse_region_data preg;
 	int *cold_domain_offset = opaque;
 	struct sbi_domain_memregion *reg;
+	struct sbi_dynamic_domain *dd;
 	int i, err = 0, len, cpus_offset, cpu_offset, doffset;
 
 	dom = sbi_zalloc(sizeof(*dom));
@@ -476,11 +478,59 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 	}
 
 	/* Register the domain */
-	err = sbi_domain_register(dom, &assign_mask);
-	if (err)
-		goto fail_free_all;
+	if (fdt_node_check_compatible(fdt, domain_offset, "dynamic")) {
+		err = sbi_domain_register(dom, &assign_mask);
+		if (err)
+			goto fail_free_all;
 
-	return 0;
+		return 0;
+	}
+
+	dd = sbi_zalloc(sizeof(*dd));
+	if (!dd) {
+		err = SBI_ENOMEM;
+		goto fail_free_all;
+	}
+
+	/* Domain sanity checks, assigned HARTs mask should be empty */
+	sbi_hartmask_for_each_hartindex(i, &assign_mask) {
+		err = SBI_EINVAL;
+		sbi_free(dd);
+		goto fail_free_all;
+	}
+
+	/* Set "dom" property */
+	dd->dom = dom;
+
+	/* Read "boot-order" DT property */
+	val32 = -1U;
+	val = fdt_getprop(fdt, domain_offset, "boot-order", &len);
+	if (val && len >= 4) {
+		val32 = fdt32_to_cpu(val[0]);
+	}
+	dd->boot_order = val32;
+
+	/* Read "excution-ctx-count" DT property */
+	val32 = 0x1;
+	val = fdt_getprop(fdt, domain_offset, "excution-ctx-count", &len);
+	if (val && len >= 4) {
+		val32 = fdt32_to_cpu(val[0]);
+	}
+	dd->excution_ctx_count = val32;
+	if (dd->excution_ctx_count != 1 &&
+		dd->excution_ctx_count !=
+			sbi_platform_hart_count(sbi_platform_thishart_ptr())) {
+		err = SBI_EINVAL;
+		sbi_free(dd);
+		goto fail_free_all;
+	}
+
+	/* Register the dynamic domain */
+	err = sbi_dynamic_domain_register(dd);
+	if (err) {
+		sbi_free(dd);
+		goto fail_free_all;
+	}
 
 fail_free_all:
 	sbi_free(mask);

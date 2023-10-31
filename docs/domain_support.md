@@ -11,6 +11,9 @@ Important entities which help implement OpenSBI domain support are:
 * **struct sbi_domain_memregion** - Representation of a domain memory region
 * **struct sbi_hartmask** - Representation of domain HART set
 * **struct sbi_domain** - Representation of a domain instance
+* **struct sbi_dynamic_domain** - Representation of a domain instance without
+  harts but works as a low level system runtime services, can be scheduled
+  by sbi_dynamic_domain_enter interface.
 
 Each HART of a RISC-V platform must have an OpenSBI domain assigned to it.
 The OpenSBI platform support is responsible for populating domains and
@@ -64,6 +67,28 @@ following additional constraints to align with RISC-V PMP requirements:
 * Two overlapping memory regions cannot have same flags
 * Memory access checks on overlapping address should prefer smallest
   overlapping memory region flags.
+
+Dynamic Domain Instance
+---------------
+
+A dynamic domain instance is represented by **struct sbi_dynamic_domain**
+in OpenSBI and has following details:
+
+* **head** - List head to a set of dynamic domains.
+* **dom** - Pointer to sbi_domain structure, for memory regions, boot
+protocal and execution level information.
+* **boot_order** - Boot order between dynamic domains to resolve dependencies
+  such as an DD providing a service required to properly boot another
+  DD. 0 indicates the highest priority.
+* **excution_ctx_count** - Topology of the dynamic domain, can take the
+  value of one or the platform hart count.
+* **context** - Pointer to dd_context structure for context information
+  of the dynamic domain.
+
+The dynamic domain context represented by **context** in **struct dd_context**
+is hidden from other modules and can only be updated when necessary through
+the inspected interface. Since the current dynamic domain does not involve
+context update requirements, that interface has not yet been implemented.
 
 ROOT Domain
 -----------
@@ -203,6 +228,33 @@ The DT properties of a domain instance DT node are as follows:
 * **system-suspend-allowed** (Optional) - A boolean flag representing
   whether the domain instance is allowed to do system suspend.
 
+### Dynamic Domain Instance Node
+
+The dynamic domain instance DT node describes the boot order, the excution
+context count, and other details of a dynamic domain instance. It support
+all properties of domain instance except **possible-harts** and **boot-hart**,
+this is because as a system runtime service, dynamic domains need to be
+allowed to run on any core. And in practice, dynamic domains are always
+started by the cold-start core using their corresponding context.
+
+The DT properties of a dynamic domain instance DT node are as follows:
+
+* **compatible** (Mandatory) - The compatible string of the dynamic
+  domain instance. This DT property should have value
+  *"opensbi,domain,instance\0dynamic"*
+* **regions** (Optional) - Same as domain instance node.
+* **next-arg1** (Optional) - Same as domain instance node.
+* **next-addr** (Optional) - Same as domain instance node.
+* **next-mode** (Optional) - Same as domain instance node.
+* **system-reset-allowed** (Optional) - Same as domain instance node.
+* **system-suspend-allowed** (Optional) - Same as domain instance node.
+* **boot-order** (Optional) - Boot order between dynamic domains. If this DT
+  property is not available, the default value of boot_order field will be
+  maximum u32, which means lowest booting priority.
+* **excution-ctx-count** (Optional) - Can take the value of one or the total
+  platform hart count. If this DT property is not available, the default
+  value of excution_ctx_count field will be one.
+
 ### Assigning HART To Domain Instance
 
 By default, all HARTs are assigned to **the ROOT domain**. The OpenSBI
@@ -245,6 +297,12 @@ be done:
                 order = <20>;
             };
 
+            stmm_mem: stmm_mem {
+                compatible = "opensbi,domain,memregion";
+                base = <0x0 0x80C00000>;
+                order = <20>;
+            };
+
             tuart: tuart {
                 compatible = "opensbi,domain,memregion";
                 base = <0x0 0x10011000>;
@@ -269,6 +327,17 @@ be done:
                 next-mode = <0x0>;
                 system-reset-allowed;
                 system-suspend-allowed;
+            };
+
+            stmm: standaloneMm-dynamic-domain {
+                compatible = "opensbi,domain,instance\0dynamic";
+				regions = <&stmm_mem 0x3f>;
+				next-arg1 = <0x0 0x80C80000>;
+				next-addr = <0x0 0x80C00000>;
+				next-mode = <0x1>;
+				system-reset-allowed;
+				boot-order = <0>;
+				excution-ctx-count = <1>;
             };
 
             udomain: untrusted-domain {
