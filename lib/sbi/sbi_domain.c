@@ -1002,6 +1002,7 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
 	int rc;
     unsigned long val;
     u32 i = current_hartid();
+    struct sbi_domain *dom;
     struct dd_context *ctx;
 
     if (dd->excution_ctx_count == 1) {
@@ -1043,7 +1044,7 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
 
     __asm__ __volatile__("sfence.vma" : : : "memory");
 
-    struct sbi_domain *dom = sbi_domain_thishart_ptr();
+    dom = sbi_domain_thishart_ptr();
 
     /* Switch to DD domain */
     domain_switch(dd->dom);
@@ -1063,14 +1064,10 @@ int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot)
 {
 	int rc;
 	struct sbi_dynamic_domain *dd;
-    struct sbi_domain *dom = sbi_domain_thishart_ptr();
 
 	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
         if ((rc = dynamic_domain_init(dd, cold_boot)))
 			return rc;
-
-	/* Restore original domain */
-	domain_switch(dom);
 
 	return 0;
 }
