@@ -841,32 +841,32 @@ static uint64_t dynamic_domain_context_entry(struct dd_context *ctx)
 	return context_enter_helper(&ctx->regs, &ctx->c_rt_ctx);
 }
 
-// static void dynamic_domain_context_exit(struct dd_context *ctx, uint64_t rc)
-// {
-// 	/* Save secure state */
-// 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
-// 	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
-// 	for (int i = 0; i < SBI_TRAP_REGS_SIZE / __SIZEOF_POINTER__; ++i) {
-// 		prev[i] = trap_regs[i];
-// 	}
+static void dynamic_domain_context_exit(struct dd_context *ctx, uint64_t rc)
+{
+	/* Save secure state */
+	uintptr_t *prev = (uintptr_t *)&ctx->regs;
+	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
+	for (int i = 0; i < SBI_TRAP_REGS_SIZE / __SIZEOF_POINTER__; ++i) {
+		prev[i] = trap_regs[i];
+	}
 
-// 	/* Set SBI Err and Ret */
-// 	ctx->regs.a0 = SBI_SUCCESS;
-// 	ctx->regs.a1 = 0;
+	/* Set SBI Err and Ret */
+	ctx->regs.a0 = SBI_SUCCESS;
+	ctx->regs.a1 = 0;
 
-// 	/* Set MEPC to next instruction */
-// 	ctx->regs.mepc = ctx->regs.mepc + 4;
+	/* Set MEPC to next instruction */
+	ctx->regs.mepc = ctx->regs.mepc + 4;
 
-// 	/* Save Secure Partition's CSR context and restore original CSR context */
-// 	save_restore_csr_context(ctx);
+	/* Save Secure Partition's CSR context and restore original CSR context */
+	save_restore_csr_context(ctx);
 
-// 	/*
-// 	 * The DD manager must have initiated the original request through a
-// 	 * synchronous entry into the secure partition. Jump back to the
-// 	 * original C runtime context with the value of rc in a0;
-// 	 */
-// 	context_exit_helper(ctx->c_rt_ctx, rc);
-// }
+	/*
+	 * The DD manager must have initiated the original request through a
+	 * synchronous entry into the secure partition. Jump back to the
+	 * original C runtime context with the value of rc in a0;
+	 */
+	context_exit_helper(ctx->c_rt_ctx, rc);
+}
 
 static void domain_switch(struct sbi_domain *target_dom)
 {
@@ -923,20 +923,6 @@ static struct sbi_dynamic_domain *find_dynamic_domain(u32 domain_index)
 	return NULL;
 }
 
-// keep track by domain_id from link list
-int sbi_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd)
-{
-	struct sbi_dynamic_domain *dd;
-
-	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
-		if (!sbi_strcmp(dd->dom->name, domain_name)) {
-			*output_dd = dd;
-			return SBI_SUCCESS;
-		}
-
-	return SBI_EINVAL;
-}
-
 /*******************************************************************************
  * Set state of a Secure Partition context.
  ******************************************************************************/
@@ -971,60 +957,45 @@ void dd_state_wait_switch(struct dd_context *sp_ptr, int from, int to)
 uint64_t sbi_dynamic_domain_entry(u32 domain_index)
 {
 	uint64_t rc;
-    struct sbi_dynamic_domain *dd = find_dynamic_domain(domain_index);
+    u32 i = current_hartid();
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
-    struct dd_context *ctx = &dd->context[0];
+    struct sbi_dynamic_domain *dd = find_dynamic_domain(domain_index);
+    struct dd_context *ctx;
 
-	/* Switch to SP domain*/
+    if (!dd)
+        return SBI_EINVAL;
+
+    ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
+
+    dd_state_wait_switch(ctx, DD_STATE_IDLE, DD_STATE_BUSY);
+
+	/* Switch to DD domain*/
     domain_switch(dd->dom);
 
-    // dd_state_wait_switch(ctx, DD_STATE_BUSY, DD_STATE_IDLE);
-
-	/* Save current CSR context and setup Secure Partition's CSR context */
-	save_restore_csr_context(ctx);
-
-	/* Enter Secure Partition */
-	rc = context_enter_helper(&ctx->regs, &ctx->c_rt_ctx);
+    rc = dynamic_domain_context_entry(ctx);
 
 	/* Restore original domain */
 	domain_switch(dom);
+
+    if (!rc)
+		dd_state_set(ctx, DD_STATE_IDLE);
 
 	return rc;
 }
 
 void sbi_dynamic_domain_exit(uint64_t rc)
 {
+    u32 i = current_hartid();
     struct sbi_domain *dom = sbi_domain_thishart_ptr();
     struct sbi_dynamic_domain *dd = find_dynamic_domain(dom->index);
-    struct dd_context *ctx = dd->context;
+    struct dd_context *ctx;
 
-	/* Save secure state */
-	uintptr_t *prev = (uintptr_t *)&ctx->regs;
-	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
-	for (int i = 0; i < SBI_TRAP_REGS_SIZE / __SIZEOF_POINTER__; ++i) {
-		prev[i] = trap_regs[i];
-	}
+    if (!dd)
+        return;
 
-	/* Set SBI Err and Ret */
-	ctx->regs.a0 = SBI_SUCCESS;
-	ctx->regs.a1 = 0;
-
-	/* Set MEPC to next instruction */
-	ctx->regs.mepc = ctx->regs.mepc + 4;
-
-	/* Save Secure Partition's CSR context and restore original CSR context */
-	save_restore_csr_context(ctx);
-
-    dd_state_set(ctx, DD_STATE_IDLE);
-
-	/*
-	 * The DD manager must have initiated the original request through a
-	 * synchronous entry into the secure partition. Jump back to the
-	 * original C runtime context with the value of rc in a0;
-	 */
-	context_exit_helper(ctx->c_rt_ctx, rc);
+    ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
+    dynamic_domain_context_exit(ctx, rc);
 }
-
 
 int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
 {

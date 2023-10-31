@@ -375,15 +375,6 @@ struct sbi_dynamic_domain {
 int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd);
 
 /**
- * This function used to get the OpenSBI domain in which Secure Partition runs
- * @param fdt pointer to FDT
- * @param nodeoff the current Secure Partition node offset in FDT
- * @param output_domain output field to get the matching domain structure
- * @return 0 on success and negative error code if no domain matches
- */
-int sbi_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd);
-
-/**
  * This function takes an DD context pointer and performs a synchronous
  * entry into it.
  * @param ctx pointer to DD context
