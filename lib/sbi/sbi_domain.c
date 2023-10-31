@@ -1016,9 +1016,6 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
     // prev_dd_ctx = 
     // while 
 
-    /* Switch to DD domain */
-    domain_switch(dd->dom);
-
     /* Initialize context for dynamic domain */
     val = csr_read(CSR_MSTATUS);
     val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
@@ -1046,8 +1043,15 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
 
     __asm__ __volatile__("sfence.vma" : : : "memory");
 
-    if ((rc = dynamic_domain_context_entry(ctx)))
+    struct sbi_domain *dom = sbi_domain_thishart_ptr();
+
+    /* Switch to DD domain */
+    domain_switch(dd->dom);
+
+    if ((rc = dynamic_domain_context_entry(ctx)) != 0)
         return rc;
+
+    domain_switch(dom);
 
     dd_state_set(ctx, DD_STATE_IDLE);
 
@@ -1061,7 +1065,7 @@ int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot)
     struct sbi_domain *dom = sbi_domain_thishart_ptr();
 
 	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
-        if ((rc = dynamic_domain_init(dd, cold_boot)))
+        if ((rc = dynamic_domain_init(dd, cold_boot)) != 0)
 			return rc;
 
 	/* Restore original domain */
