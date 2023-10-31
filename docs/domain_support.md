@@ -202,6 +202,15 @@ The DT properties of a domain instance DT node are as follows:
   whether the domain instance is allowed to do system reset.
 * **system-suspend-allowed** (Optional) - A boolean flag representing
   whether the domain instance is allowed to do system suspend.
+* **reentrant** (Optional) - When this option is turned on, the domain no
+  longer monopolizes a set of cores (hart assignment is illegal), and its
+  context is managed by the domain module and scheduled on demand, thus
+  working as a low-privilege system runtime. Reentrant domains are always
+  started by cold boot hart before the end of the cold boot, and domain_suspend
+  and domain_resume are used to transfer the current core or resume execution
+  on the current core. Currently, reentrant domains only support migratory
+  unified contexts, and reentrant requests on multiple cores will be
+  synchronized.
 
 ### Assigning HART To Domain Instance
 
@@ -245,6 +254,12 @@ be done:
                 order = <20>;
             };
 
+            stmm_mem: stmm_mem {
+                compatible = "opensbi,domain,memregion";
+                base = <0x0 0x80C00000>;
+                order = <20>;
+            };
+
             tuart: tuart {
                 compatible = "opensbi,domain,memregion";
                 base = <0x0 0x10011000>;
@@ -269,6 +284,17 @@ be done:
                 next-mode = <0x0>;
                 system-reset-allowed;
                 system-suspend-allowed;
+            };
+
+            mmdomain: standalonemm-domain {
+                compatible = "opensbi,domain,instance";
+                regions = <&stmm_mem 0x3f>;
+                next-arg1 = <0x0 0x80C80000>;
+                next-addr = <0x0 0x80C00000>;
+                next-mode = <0x1>;
+                system-reset-allowed;
+                system-suspend-allowed;
+                reentrant;
             };
 
             udomain: untrusted-domain {

@@ -475,6 +475,16 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 			sbi_hartmask_set_hartid(val32, &assign_mask);
 	}
 
+	/* Read "reentrant" DT property */
+	if (fdt_get_property(fdt, domain_offset, "reentrant", NULL)) {
+		dom->reentrant = true;
+		dom->next_ctx = sbi_zalloc(sizeof(struct sbi_domain_context));
+		if (!dom->next_ctx) {
+			err = SBI_ENOMEM;
+			goto fail_free_all;
+		}
+	}
+
 	/* Register the domain */
 	err = sbi_domain_register(dom, &assign_mask);
 	if (err)

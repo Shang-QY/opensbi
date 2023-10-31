@@ -12,6 +12,9 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_trap.h>
+#include <sbi/sbi_list.h>
+#include <sbi/riscv_locks.h>
 
 struct sbi_scratch;
 
@@ -159,6 +162,20 @@ struct sbi_domain_memregion {
 /** Maximum number of domains */
 #define SBI_DOMAIN_MAX_INDEX			32
 
+/** Representation of Dynamic Domain context */
+struct sbi_domain_context {
+	/** Context for all general registers */
+	struct sbi_trap_regs regs;
+	/** Context for S mode CSR registers */
+	uint64_t csr_stvec;
+	uint64_t csr_sscratch;
+	uint64_t csr_sie;
+	uint64_t csr_satp;
+	/** secure context for S mode CSR registers */
+	u32 prev_domain_idx;
+	spinlock_t state_lock;
+};
+
 /** Representation of OpenSBI domain */
 struct sbi_domain {
 	/**
@@ -172,6 +189,7 @@ struct sbi_domain {
 	 * in the coldboot path
 	 */
 	struct sbi_hartmask assigned_harts;
+	struct sbi_hartmask pinned_harts;
 	/** Name of this domain */
 	char name[64];
 	/** Possible HARTs in this domain */
@@ -186,6 +204,10 @@ struct sbi_domain {
 	unsigned long next_addr;
 	/** Privilege mode of next booting stage for this domain */
 	unsigned long next_mode;
+	/** Is domain allowed reentrant */
+	bool reentrant;
+	/** Next reentrant context for this the domain */
+	struct sbi_domain_context *next_ctx;
 	/** Is domain allowed to reset the system */
 	bool system_reset_allowed;
 	/** Is domain allowed to suspend the system */
@@ -324,5 +346,22 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
+
+/**
+ * This function takes an context pointer and performs a synchronous
+ * entry into it.
+ * @param ctx pointer to domain context
+ * @return 0 on success
+ * @return other values if it encounters errors
+ */
+uint64_t sbi_domain_resume(u32 domain_index);
+
+/**
+ * This function returns to the place where sbi_domain_resume() was
+ * called originally.
+ * @param ctx pointer to domain context
+ * @param rc the return value for the original entry call
+ */
+void sbi_domain_suspend(uint64_t rc);
 
 #endif
