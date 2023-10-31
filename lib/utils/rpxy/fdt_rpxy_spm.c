@@ -29,9 +29,6 @@ struct fdt_spm {
 			unsigned long *ack_len);
 };
 
-/** Request the manager corresponding to an SPM service group instance */
-int fdt_spm_request_manager(void *fdt, int nodeoff, struct fdt_spm **out_manager);
-
 #define MM_VERSION_MAJOR        1
 #define MM_VERSION_MAJOR_SHIFT  16
 #define MM_VERSION_MAJOR_MASK   0x7FFF
@@ -106,7 +103,8 @@ void set_mm_boot_info(uint64_t a1)
 	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
 }
 
-int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain)
+int find_domain(void *fdt, int nodeoff, const char *compatible,
+            struct sbi_domain **output_domain)
 {
 	u32 i;
 	const u32 *val;
@@ -114,17 +112,7 @@ int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_domain **output_domai
 	int domain_offset, len;
 	char name[64];
 
-	val = fdt_getprop(fdt, nodeoff, "opensbi-dynamic-domain", &len);
-	if (!val || len < 4) {
-		return SBI_EINVAL;
-	}
-
-	domain_offset = fdt_node_offset_by_phandle(fdt, fdt32_to_cpu(*val));
-	if (domain_offset < 0) {
-		return SBI_EINVAL;
-	}
-
-	val = fdt_getprop(fdt, domain_offset, "domain-instance", &len);
+	val = fdt_getprop(fdt, nodeoff, compatible, &len);
 	if (!val || len < 4) {
 		return SBI_EINVAL;
 	}
@@ -160,7 +148,7 @@ int spm_mm_setup(void *fdt, int nodeoff,
 	int rc;
     struct sbi_domain *dom;
 
-	rc = find_dynamic_domain(fdt, nodeoff, &dom);
+	rc = find_domain(fdt, nodeoff, "opensbi-domain-instance", &dom);
 	if (rc) {
 		return SBI_EINVAL;
 	}
