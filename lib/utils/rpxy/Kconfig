@@ -14,8 +14,8 @@ config FDT_RPXY_MBOX
 	depends on FDT_MAILBOX
 	default n
 
-config FDT_RPXY_SDM
-	bool "FDT RPXY SDM(Secure Domain Manager) client driver"
+config FDT_RPXY_DDM
+	bool "FDT RPXY DDM(Dynamic Domain Manager) client driver"
 	default n
 
 endif

@@ -323,7 +323,7 @@ static const struct fdt_match rpxy_spm_match[] = {
 	{},
 };
 
-struct fdt_rpxy fdt_rpxy_spm = {
+struct fdt_rpxy fdt_rpxy_ddm = {
 	.match_table = rpxy_spm_match,
 	.init = rpxy_spm_init,
 };
