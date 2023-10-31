@@ -912,16 +912,16 @@ int sbi_dynamic_domain_register(struct sbi_dynamic_domain *dd)
 	return 0;
 }
 
-// static struct sbi_dynamic_domain *find_dynamic_domain(u32 domain_index)
-// {
-// 	struct sbi_dynamic_domain *dd;
+static struct sbi_dynamic_domain *find_dynamic_domain(u32 domain_index)
+{
+	struct sbi_dynamic_domain *dd;
 
-// 	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
-// 		if (dd->dom->index == domain_index)
-// 			return dd;
+	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
+		if (dd->dom->index == domain_index)
+			return dd;
 
-// 	return NULL;
-// }
+	return NULL;
+}
 
 // keep track by domain_id from link list
 int sbi_find_dynamic_domain(char *domain_name, struct sbi_dynamic_domain **output_dd)
@@ -968,9 +968,10 @@ void dd_state_wait_switch(struct dd_context *sp_ptr, int from, int to)
 	}
 }
 
-uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd)
+uint64_t sbi_dynamic_domain_entry(u32 domain_index)
 {
 	uint64_t rc;
+    struct sbi_dynamic_domain *dd = find_dynamic_domain(domain_index);
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
     struct dd_context *ctx = &dd->context[0];
 
@@ -991,8 +992,10 @@ uint64_t sbi_dynamic_domain_entry(struct sbi_dynamic_domain *dd)
 	return rc;
 }
 
-void sbi_dynamic_domain_exit(struct sbi_dynamic_domain *dd, uint64_t rc)
+void sbi_dynamic_domain_exit(uint64_t rc)
 {
+    struct sbi_domain *dom = sbi_domain_thishart_ptr();
+    struct sbi_dynamic_domain *dd = find_dynamic_domain(dom->index);
     struct dd_context *ctx = dd->context;
 
 	/* Save secure state */
@@ -1085,14 +1088,14 @@ int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
     return 0;
 }
 
-int sbi_dynamic_domain_init(struct sbi_scratch *scratch)
+int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot)
 {
 	int rc;
 	struct sbi_dynamic_domain *dd;
     struct sbi_domain *dom = sbi_domain_thishart_ptr();
 
 	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
-        if ((rc = dynamic_domain_init(dd, true)))
+        if ((rc = dynamic_domain_init(dd, cold_boot)))
 			return rc;
 
 	/* Restore original domain */

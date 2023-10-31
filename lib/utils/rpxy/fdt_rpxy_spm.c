@@ -42,7 +42,7 @@ int fdt_spm_request_manager(void *fdt, int nodeoff, struct fdt_spm **out_manager
 #define MM_VERSION_COMPILED     MM_VERSION_FORM(MM_VERSION_MAJOR, \
                                                 MM_VERSION_MINOR)
 
-static struct sbi_dynamic_domain *dd;
+static struct sbi_domain *dom;
 
 struct efi_param_header {
 	uint8_t type;	/* type of the structure */
@@ -107,9 +107,11 @@ void set_mm_boot_info(uint64_t a1)
 	mm_shared_buffer->mm_payload_boot_info.cpu_info = mm_shared_buffer->mm_cpu_info;
 }
 
-int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **output_dd)
+int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_domain **output_domain)
 {
-	const u32 *val;
+	u32 i;
+    const u32 *val;
+    struct sbi_domain *dom;
 	int domain_offset, len;
 	char name[64];
 
@@ -138,7 +140,14 @@ int find_dynamic_domain(void *fdt, int nodeoff, struct sbi_dynamic_domain **outp
 			sizeof(name));
 	name[sizeof(name) - 1] = '\0';
 
-	return sbi_find_dynamic_domain(name, output_dd);
+    sbi_domain_for_each(i, dom) {
+		if (!sbi_strcmp(dom->name, name)) {
+			*output_domain = dom;
+			return SBI_SUCCESS;
+		}
+	}
+
+	return SBI_EINVAL;
 }
 
 /*
@@ -149,13 +158,13 @@ int spm_mm_setup(void *fdt, int nodeoff,
 {
 	int rc;
 
-	rc = find_dynamic_domain(fdt, nodeoff, &dd);
+	rc = find_dynamic_domain(fdt, nodeoff, &dom);
 	if (rc) {
         sbi_printf("[SQY debug] Error: %s %d\n", __func__, __LINE__);
 		return SBI_EINVAL;
 	}
 
-	set_mm_boot_info(dd->dom->next_arg1);
+	set_mm_boot_info(dom->next_arg1);
 
 	return 0;
 }
@@ -169,9 +178,9 @@ static int spm_message_handler_mm(int srv_id,
 		*((int32_t *)rx) = 0;
 		*((uint32_t *)(rx + sizeof(uint32_t))) = MM_VERSION_COMPILED;
 	} else if (RPMI_MM_SRV_MM_COMMUNICATE == srv_id) {
-		sbi_dynamic_domain_entry(dd);
+		sbi_dynamic_domain_entry(dom->index);
 	} else if (RPMI_MM_SRV_MM_COMPLETE == srv_id) {
-		sbi_dynamic_domain_exit(dd, 0);
+		sbi_dynamic_domain_exit(0);
 	}
 	return 0;
 }
