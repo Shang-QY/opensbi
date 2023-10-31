@@ -812,3 +812,49 @@ fail_free_domain_hart_ptr_offset:
 	sbi_scratch_free_offset(domain_hart_ptr_offset);
 	return rc;
 }
+
+/** Assembly helpers */
+uint64_t context_enter_helper(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
+void context_exit_helper(uint64_t c_rt_ctx, uint64_t ret);
+
+static uint64_t sbi_domain_context_enter(struct sbi_domain_context *ctx)
+{
+	/* Save current CSR context and setup Secure Partition's CSR context */
+	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
+	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
+	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
+	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
+
+	/* Enter Secure Partition */
+	return context_enter_helper(&ctx->regs, &ctx->c_rt_ctx);
+}
+
+static void sbi_domain_context_exit(struct sbi_domain_context *ctx, uint64_t rc)
+{
+	/* Save secure state */
+	uintptr_t *prev = (uintptr_t *)&ctx->regs;
+	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
+	for (int i = 0; i < SBI_TRAP_REGS_SIZE / __SIZEOF_POINTER__; ++i) {
+		prev[i] = trap_regs[i];
+	}
+
+	/* Set SBI Err and Ret */
+	ctx->regs.a0 = SBI_SUCCESS;
+	ctx->regs.a1 = 0;
+
+	/* Set MEPC to next instruction */
+	ctx->regs.mepc = ctx->regs.mepc + 4;
+
+	/* Save Secure Partition's CSR context and restore original CSR context */
+	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
+	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
+	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
+	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
+
+	/*
+	 * The DD manager must have initiated the original request through a
+	 * synchronous entry into the secure partition. Jump back to the
+	 * original C runtime context with the value of rc in a0;
+	 */
+	context_exit_helper(ctx->c_rt_ctx, rc);
+}

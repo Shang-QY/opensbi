@@ -12,6 +12,7 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_trap.h>
 
 struct sbi_scratch;
 
@@ -324,5 +325,19 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
+
+
+/** Representation of OpenSBI Dynamic Domain */
+struct sbi_dynamic_domain {
+	/** List head to a set of service groups */
+	struct sbi_dlist head;
+
+	/** OpenSBI domain in which Secure Partition runs */
+	struct sbi_domain *dom;
+
+	u32 boot_order;
+	u32 excution_ctx_count;
+	struct dd_context *context;
+};
 
 #endif
