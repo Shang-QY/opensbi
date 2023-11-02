@@ -13,6 +13,7 @@
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_error.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_platform.h>
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi_utils/fdt/fdt_domain.h>
@@ -581,7 +582,9 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dd_offset,
 		val32 = fdt32_to_cpu(val[0]);
 	}
 	dd->excution_ctx_count = val32;
-	if (dd->excution_ctx_count != 1) {
+	if (dd->excution_ctx_count != 1 &&
+	    dd->excution_ctx_count !=
+		    sbi_platform_hart_count(sbi_platform_thishart_ptr())) {
 		err = SBI_EINVAL;
 		goto fail_free;
 	}
