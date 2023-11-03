@@ -18,42 +18,15 @@
 #include <sbi/sbi_scratch.h>
 #include <sbi_utils/fdt/fdt_domain.h>
 #include <sbi_utils/fdt/fdt_helper.h>
-
-int fdt_iterate_each_dynamic_domain(void *fdt, void *opaque,
-			    int (*fn)(void *fdt, int domain_offset,
-				       void *opaque))
-{
-	int rc, doffset, poffset;
-
-	if (!fdt || !fn)
-		return SBI_EINVAL;
-
-	poffset = fdt_path_offset(fdt, "/chosen");
-	if (poffset < 0)
-		return 0;
-	poffset = fdt_node_offset_by_compatible(fdt, poffset,
-						"opensbi,domain,config");
-	if (poffset < 0)
-		return 0;
-
-	fdt_for_each_subnode(doffset, fdt, poffset) {
-		if (fdt_node_check_compatible(fdt, doffset,
-					      "opensbi,domain,dynamic-instance"))
-			continue;
-
-		rc = fn(fdt, doffset, opaque);
-		if (rc)
-			return rc;
-	}
-
-	return 0;
-}
+#include <sbi/sbi_console.h>
 
 int fdt_iterate_each_domain(void *fdt, void *opaque,
 			    int (*fn)(void *fdt, int domain_offset,
 				       void *opaque))
 {
 	int rc, doffset, poffset;
+    const void *prop;
+    int len;
 
 	if (!fdt || !fn)
 		return SBI_EINVAL;
@@ -70,6 +43,14 @@ int fdt_iterate_each_domain(void *fdt, void *opaque,
 		if (fdt_node_check_compatible(fdt, doffset,
 					      "opensbi,domain,instance"))
 			continue;
+        
+        prop = fdt_getprop(fdt, doffset, "compatible", &len);
+        sbi_printf("[sqy debug] %s\n", (const char *)prop);
+		if (fdt_node_check_compatible(fdt, doffset,
+					      "dynamic") == 0) {
+            sbi_printf("[sqy debug] dd\n");
+			continue;
+                          }
 
 		rc = fn(fdt, doffset, opaque);
 		if (rc)
@@ -589,12 +570,12 @@ static int __fdt_parse_dynamic_domain(void *fdt, int dd_offset,
 		goto fail_free;
 	}
 
-	dd->context = sbi_calloc(sizeof(*ctx),
-				  dd->excution_ctx_count);
-	if (!dd->context) {
-		err = SBI_ENOMEM;
-		goto fail_free;
-	}
+	// dd->context = sbi_calloc(sizeof(*ctx),
+	// 			  dd->excution_ctx_count);
+	// if (!dd->context) {
+	// 	err = SBI_ENOMEM;
+	// 	goto fail_free;
+	// }
 
 	/* Register the dynamic domain */
 	err = sbi_dynamic_domain_register(dd);
@@ -647,11 +628,6 @@ int fdt_domains_populate(void *fdt)
 	}
 
 	/* Iterate over each domain in FDT and populate details */
-	err = fdt_iterate_each_domain(fdt, &cold_domain_offset,
+	return fdt_iterate_each_domain(fdt, &cold_domain_offset,
 				       __fdt_parse_domain);
-	if (err)
-		return err;
-
-	return fdt_iterate_each_dynamic_domain(fdt, NULL,
-				       __fdt_parse_dynamic_domain);
 }
