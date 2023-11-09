@@ -176,7 +176,6 @@ struct sbi_domain_context {
 	 * returning from a synchronous entry into Secure Partition.
 	 */
 	uintptr_t c_rt_ctx;
-	volatile int state;
 	spinlock_t state_lock;
 };
 
@@ -210,7 +209,7 @@ struct sbi_domain {
 	/** Is domain allowed reentrant */
 	bool reentrant;
 	/** Next reentrant context for this the domain */
-	struct sbi_domain_ctx *next_ctx;
+	struct sbi_domain_context *next_ctx;
 	/** Is domain allowed to reset the system */
 	bool system_reset_allowed;
 	/** Is domain allowed to suspend the system */
@@ -357,7 +356,7 @@ int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
  * @return 0 on success
  * @return other values if it encounters errors
  */
-uint64_t sbi_domain_suspend(u32 domain_index);
+uint64_t sbi_domain_resume(u32 domain_index);
 
 /**
  * This function returns to the place where sbi_domain_resume() was
@@ -365,6 +364,8 @@ uint64_t sbi_domain_suspend(u32 domain_index);
  * @param ctx pointer to domain context
  * @param rc the return value for the original entry call
  */
-void sbi_domain_resume(uint64_t rc);
+void sbi_domain_suspend(uint64_t rc);
+
+int sbi_reentrant_domain_init(struct sbi_scratch *scratch);
 
 #endif

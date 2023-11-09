@@ -259,7 +259,8 @@ static const struct sbi_domain_memregion *find_next_subset_region(
 }
 
 static int sanitize_domain(const struct sbi_platform *plat,
-			   struct sbi_domain *dom)
+			   struct sbi_domain *dom,
+               const struct sbi_hartmask *assign_mask)
 {
 	u32 i, j, count;
 	struct sbi_domain_memregion treg, *reg, *reg1;
@@ -278,6 +279,21 @@ static int sanitize_domain(const struct sbi_platform *plat,
 			return SBI_EINVAL;
 		}
 	}
+
+    /* Check reentrant domain's context and assign HARTs */
+    if (dom->reentrant) {
+        if (!dom->next_ctx) {
+            sbi_printf("%s: %s reentrant domain context is NULL\n",
+                __func__, dom->name);
+            return SBI_EINVAL;
+        }
+
+        sbi_hartmask_for_each_hartindex(i, assign_mask) {
+            sbi_printf("%s: %s reentrant domain with assign HART\n",
+                __func__, dom->name);
+            return SBI_EINVAL;
+        }
+    }
 
 	/* Check memory regions */
 	if (!dom->regions) {
@@ -519,7 +535,7 @@ int sbi_domain_register(struct sbi_domain *dom,
 	}
 
 	/* Sanitize discovered domain */
-	rc = sanitize_domain(plat, dom);
+	rc = sanitize_domain(plat, dom, assign_mask);
 	if (rc) {
 		sbi_printf("%s: sanity checks failed for"
 			   " %s (error %d)\n", __func__,
@@ -557,9 +573,6 @@ int sbi_domain_register(struct sbi_domain *dom,
 			dom->boot_hartid = cold_hartid;
 		}
 	}
-	if(dom->reentrant) {
-		dom->next_ctx = sbi_calloc(sizeof(struct sbi_domain_context), 1);
-	}
 
 	return 0;
 }
@@ -595,7 +608,7 @@ int sbi_domain_root_add_memregion(const struct sbi_domain_memregion *reg)
 	/* Sort and optimize root regions */
 	do {
 		/* Sanitize the root domain so that memregions are sorted */
-		rc = sanitize_domain(plat, &root);
+		rc = sanitize_domain(plat, &root, NULL);
 		if (rc) {
 			sbi_printf("%s: sanity checks failed for"
 				   " %s (error %d)\n", __func__,
@@ -660,6 +673,7 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 {
 	int rc;
 	u32 i, dhart;
+	unsigned long val;
 	struct sbi_domain *dom;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
@@ -708,6 +722,29 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 			}
 		}
 	}
+
+	/* Initialize context for reentrant domain */
+	sbi_domain_for_each(i, dom) {
+        if(dom->reentrant) {
+            val = csr_read(CSR_MSTATUS);
+            val = INSERT_FIELD(val, MSTATUS_MPP, dom->next_mode);
+            val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+
+            /* Setup secure M-mode CSR context */
+            dom->next_ctx->regs.mstatus = val;
+            dom->next_ctx->regs.mepc = dom->next_addr;
+
+            /* Setup secure S-mode CSR context */
+            dom->next_ctx->csr_stvec = dom->next_addr;
+            dom->next_ctx->csr_sscratch = 0;
+            dom->next_ctx->csr_sie = 0;
+            dom->next_ctx->csr_satp = 0;
+
+            /* Setup boot arguments */
+            dom->next_ctx->regs.a0 = current_hartid();
+            dom->next_ctx->regs.a1 = dom->next_arg1;
+        }
+    }
 
 	/*
 	 * Set the finalized flag so that the root domain
@@ -822,7 +859,7 @@ fail_free_domain_hart_ptr_offset:
 uint64_t context_enter_helper(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
 void context_exit_helper(uint64_t c_rt_ctx, uint64_t ret);
 
-static uint64_t sbi_domain_context_enter(struct sbi_domain_context *ctx)
+static uint64_t domain_context_enter(struct sbi_domain_context *ctx)
 {
 	/* Save current CSR context and setup Secure Partition's CSR context */
 	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
@@ -834,7 +871,7 @@ static uint64_t sbi_domain_context_enter(struct sbi_domain_context *ctx)
 	return context_enter_helper(&ctx->regs, &ctx->c_rt_ctx);
 }
 
-static void sbi_domain_context_exit(struct sbi_domain_context *ctx, uint64_t rc)
+static void domain_context_exit(struct sbi_domain_context *ctx, uint64_t rc)
 {
 	/* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
@@ -874,140 +911,57 @@ static void domain_switch(struct sbi_domain *target_dom)
 	sbi_hartmask_clear_hartindex(hartid, &dom->assigned_harts);
 	update_hartindex_to_domain(hartid, target_dom);
 	sbi_hartmask_set_hartindex(hartid, &target_dom->assigned_harts);
-        for(int i = 0; i < pmp_count; i++) {
+    for(int i = 0; i < pmp_count; i++) {
 		pmp_disable(i);
 	}
 	sbi_hart_pmp_configure(scratch);
 }
 
-uint64_t sbi_domain_suspend(u32 domain_index)
+uint64_t sbi_domain_resume(u32 domain_index)
 {
-#if 0
 	uint64_t rc;
-	u32 i = current_hartid();
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
-	struct sbi_dynamic_domain *dd = find_dynamic_domain(domain_index);
-	struct dd_context *ctx;
+	struct sbi_domain *tdom = domidx_to_domain_table[domain_index];
 
-	if (!dd)
-		return SBI_EINVAL;
+	/* Switch to target domain*/
+	domain_switch(tdom);
 
-	ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
-
-	dd_state_wait_switch(ctx, DD_STATE_IDLE, DD_STATE_BUSY);
-
-	/* Switch to DD domain*/
-	domain_switch(dd->dom);
-
-	rc = dynamic_domain_context_entry(ctx);
+	rc = domain_context_enter(tdom->next_ctx);
 
 	/* Restore original domain */
 	domain_switch(dom);
-
-	if (!rc)
-		dd_state_set(ctx, DD_STATE_IDLE);
 
 	return rc;
-#endif	
 }
 
-void sbi_domain_resume(uint64_t rc)
+void sbi_domain_suspend(uint64_t rc)
 {
-#if 0
-	u32 i = current_hartid();
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
-	struct sbi_dynamic_domain *dd = find_dynamic_domain(dom->index);
-	struct dd_context *ctx;
 
-	if (!dd)
-		return;
-
-	ctx = (dd->excution_ctx_count == 1) ? dd->context : &dd->context[i];
-	dynamic_domain_context_exit(ctx, rc);
-#endif	
+	domain_context_exit(dom->next_ctx, rc);
 }
 
-#if 0
-TBD in sbi_domain_finalize ?? And use domidx_to_domain_table
-int dynamic_domain_init(struct sbi_dynamic_domain *dd, bool cold_boot)
-{
-	int rc, prev_state;
-	unsigned long val;
-	u32 i = current_hartid();
-	struct sbi_dynamic_domain *prev_dd;
-	struct sbi_domain *dom;
-	struct dd_context *ctx;
-
-	if (dd->excution_ctx_count == 1) {
-		if (!cold_boot)
-			return 0;
-		ctx = dd->context;
-	} else {
-		ctx = &dd->context[i];
-	}
-
-	/* Wait for the previous DD initialization to complete */
-	if (dd->head.prev != &dynamic_domain_list) {
-		prev_dd = container_of(dd->head.prev,
-						   struct sbi_dynamic_domain, head);
-		do {										  \
-			prev_state = prev_dd->context->state; \
-			rmb();								\
-		} while (prev_state != DD_STATE_IDLE);
-	}
-
-	/* Initialize context for dynamic domain */
-	val = csr_read(CSR_MSTATUS);
-	val = INSERT_FIELD(val, MSTATUS_MPP, dd->dom->next_mode);
-	val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
-
-	/* Setup secure M-mode CSR context */
-	ctx->regs.mstatus = val;
-	ctx->regs.mepc = dd->dom->next_addr;
-
-	/* Setup secure S-mode CSR context */
-	ctx->csr_stvec = dd->dom->next_addr;
-	ctx->csr_sscratch = 0;
-	ctx->csr_sie = 0;
-	ctx->csr_satp = 0;
-
-	/* Setup boot arguments */
-	ctx->regs.a0 = current_hartid();
-	ctx->regs.a1 = dd->dom->next_arg1;
-
-	/* clear pending interrupts */
-	csr_read_clear(CSR_MIP, MIP_MTIP);
-	csr_read_clear(CSR_MIP, MIP_STIP);
-	csr_read_clear(CSR_MIP, MIP_SSIP);
-	csr_read_clear(CSR_MIP, MIP_SEIP);
-
-	__asm__ __volatile__("sfence.vma" : : : "memory");
-
-	dom = sbi_domain_thishart_ptr();
-
-	/* Switch to DD domain */
-	domain_switch(dd->dom);
-
-	if ((rc = dynamic_domain_context_entry(ctx)) != 0)
-		return rc;
-
-	/* Restore original domain */
-	domain_switch(dom);
-
-	dd_state_set(ctx, DD_STATE_IDLE);
-
-	return 0;
-}
-
-int sbi_dynamic_domain_init(struct sbi_scratch *scratch, bool cold_boot)
+int sbi_reentrant_domain_init(struct sbi_scratch *scratch)
 {
 	int rc;
-	struct sbi_dynamic_domain *dd;
+    u32 i;
+    struct sbi_domain *tdom;
 
-	sbi_list_for_each_entry(dd, &dynamic_domain_list, head)
-		if ((rc = dynamic_domain_init(dd, cold_boot)))
-			return rc;
+    sbi_domain_for_each(i, tdom) {
+        if(tdom->reentrant) {
+            /* clear pending interrupts */
+            csr_read_clear(CSR_MIP, MIP_MTIP);
+            csr_read_clear(CSR_MIP, MIP_STIP);
+            csr_read_clear(CSR_MIP, MIP_SSIP);
+            csr_read_clear(CSR_MIP, MIP_SEIP);
+
+            __asm__ __volatile__("sfence.vma" : : : "memory");
+
+            /* Init reentrant domain */
+            if ((rc = sbi_domain_resume(i)))
+                return rc;
+        }
+    }
 
 	return 0;
 }
-#endif
