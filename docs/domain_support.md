@@ -231,6 +231,12 @@ be done:
   from the device tree passed by previous booting stage before passing it
   to the next booting stage.
 
+### Domain Context Manager
+![image](https://github.com/Penglai-Enclave/opensbi/assets/21300636/5a5af770-e34c-433b-84ad-248e5d1ecf6b)
+
+Testing application
+The proposed patches can be found at 
+
 ### Example
 
 ```
