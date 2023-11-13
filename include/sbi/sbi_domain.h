@@ -164,18 +164,15 @@ struct sbi_domain_memregion {
 
 /** Representation of Dynamic Domain context */
 struct sbi_domain_context {
-	/** secure context for all general registers */
+	/** Context for all general registers */
 	struct sbi_trap_regs regs;
-	/** secure context for S mode CSR registers */
+	/** Context for S mode CSR registers */
 	uint64_t csr_stvec;
 	uint64_t csr_sscratch;
 	uint64_t csr_sie;
 	uint64_t csr_satp;
-	/**
-	 * stack address to restore C runtime context from after
-	 * returning from a synchronous entry into Secure Partition.
-	 */
-	uintptr_t c_rt_ctx;
+	/** secure context for S mode CSR registers */
+	u32 prev_domain_idx;
 	spinlock_t state_lock;
 };
 
@@ -192,6 +189,7 @@ struct sbi_domain {
 	 * in the coldboot path
 	 */
 	struct sbi_hartmask assigned_harts;
+	struct sbi_hartmask pinned_harts;
 	/** Name of this domain */
 	char name[64];
 	/** Possible HARTs in this domain */
@@ -365,7 +363,5 @@ uint64_t sbi_domain_resume(u32 domain_index);
  * @param rc the return value for the original entry call
  */
 void sbi_domain_suspend(uint64_t rc);
-
-int sbi_reentrant_domain_init(struct sbi_scratch *scratch);
 
 #endif

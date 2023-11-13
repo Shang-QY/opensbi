@@ -258,6 +258,14 @@ static const struct sbi_domain_memregion *find_next_subset_region(
 	return ret;
 }
 
+static bool hartmask_empty(const struct sbi_hartmask *mask) {
+    u32 i;
+    sbi_hartmask_for_each_hartindex(i, mask) {
+        return false;
+    }
+    return true;
+}
+
 static int sanitize_domain(const struct sbi_platform *plat,
 			   struct sbi_domain *dom,
                const struct sbi_hartmask *assign_mask)
@@ -551,27 +559,31 @@ int sbi_domain_register(struct sbi_domain *dom,
 	sbi_hartmask_clear_all(&dom->assigned_harts);
 
 	/* Assign domain to HART if HART is a possible HART */
-	sbi_hartmask_for_each_hartindex(i, assign_mask) {
-		if (!sbi_hartmask_test_hartindex(i, dom->possible_harts))
-			continue;
+	sbi_hartmask_for_each_hartindex(i, dom->possible_harts) {
+		if (dom->reentrant || sbi_hartmask_test_hartindex(i, assign_mask)) {
+            /*
+            * If cold boot HART is assigned to this domain then
+            * override boot HART of this domain.
+            */
+            if (sbi_hartindex_to_hartid(i) == cold_hartid &&
+                dom->boot_hartid != cold_hartid) {
+                sbi_printf("Domain%d Boot HARTID forced to"
+                    " %d\n", dom->index, cold_hartid);
+                dom->boot_hartid = cold_hartid;
+            }
 
-		tdom = sbi_hartindex_to_domain(i);
-		if (tdom)
-			sbi_hartmask_clear_hartindex(i,
-					&tdom->assigned_harts);
-		update_hartindex_to_domain(i, dom);
-		sbi_hartmask_set_hartindex(i, &dom->assigned_harts);
+            if (dom->reentrant && i != dom->boot_hartid)
+			    continue;
 
-		/*
-		 * If cold boot HART is assigned to this domain then
-		 * override boot HART of this domain.
-		 */
-		if (sbi_hartindex_to_hartid(i) == cold_hartid &&
-		    dom->boot_hartid != cold_hartid) {
-			sbi_printf("Domain%d Boot HARTID forced to"
-				   " %d\n", dom->index, cold_hartid);
-			dom->boot_hartid = cold_hartid;
-		}
+            tdom = sbi_hartindex_to_domain(i);
+            if (tdom) {
+                sbi_hartmask_set_hartindex(i, &tdom->pinned_harts);
+                if (dom->reentrant)
+                    dom->next_ctx->prev_domain_idx = tdom->index;
+            }
+            update_hartindex_to_domain(i, dom);
+            sbi_hartmask_set_hartindex(i, &dom->assigned_harts);
+        }
 	}
 
 	return 0;
@@ -685,6 +697,8 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 		return rc;
 	}
 
+    // TODO: test domain contains cold boot hart is not pinned.
+
 	/* Startup boot HART of domains */
 	sbi_domain_for_each(i, dom) {
 		/* Domain boot HART index */
@@ -708,7 +722,7 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 			scratch->next_addr = dom->next_addr;
 			scratch->next_mode = dom->next_mode;
 			scratch->next_arg1 = dom->next_arg1;
-		} else {
+		} else if (hartmask_empty(&dom->pinned_harts)) {
 			rc = sbi_hsm_hart_start(scratch, NULL,
 						dom->boot_hartid,
 						dom->next_addr,
@@ -855,50 +869,24 @@ fail_free_domain_hart_ptr_offset:
 	return rc;
 }
 
-/** Assembly helpers */
-uint64_t context_enter_helper(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
-void context_exit_helper(uint64_t c_rt_ctx, uint64_t ret);
-
-static uint64_t domain_context_enter(struct sbi_domain_context *ctx)
+static void domain_context_swap(struct sbi_domain_context *ctx)
 {
-	/* Save current CSR context and setup Secure Partition's CSR context */
-	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
-	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
-	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
-	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
+	uintptr_t tmp;
 
-	/* Enter Secure Partition */
-	return context_enter_helper(&ctx->regs, &ctx->c_rt_ctx);
-}
-
-static void domain_context_exit(struct sbi_domain_context *ctx, uint64_t rc)
-{
-	/* Save secure state */
+    /* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
 	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
 	for (int i = 0; i < SBI_TRAP_REGS_SIZE / __SIZEOF_POINTER__; ++i) {
-		prev[i] = trap_regs[i];
+		tmp = prev[i];
+        prev[i] = trap_regs[i];
+        trap_regs[i] = tmp;
 	}
-
-	/* Set SBI Err and Ret */
-	ctx->regs.a0 = SBI_SUCCESS;
-	ctx->regs.a1 = 0;
-
-	/* Set MEPC to next instruction */
-	ctx->regs.mepc = ctx->regs.mepc + 4;
 
 	/* Save Secure Partition's CSR context and restore original CSR context */
 	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
 	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
 	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
 	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
-
-	/*
-	 * The DD manager must have initiated the original request through a
-	 * synchronous entry into the secure partition. Jump back to the
-	 * original C runtime context with the value of rc in a0;
-	 */
-	context_exit_helper(ctx->c_rt_ctx, rc);
 }
 
 static void domain_switch(struct sbi_domain *target_dom)
@@ -919,49 +907,62 @@ static void domain_switch(struct sbi_domain *target_dom)
 
 uint64_t sbi_domain_resume(u32 domain_index)
 {
-	uint64_t rc;
-	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+	uint64_t rc = 0;
 	struct sbi_domain *tdom = domidx_to_domain_table[domain_index];
 
 	/* Switch to target domain*/
 	domain_switch(tdom);
 
-	rc = domain_context_enter(tdom->next_ctx);
-
-	/* Restore original domain */
-	domain_switch(dom);
+	domain_context_swap(tdom->next_ctx);
 
 	return rc;
 }
 
 void sbi_domain_suspend(uint64_t rc)
 {
+	unsigned long val;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+    struct sbi_domain *tdom =
+        domidx_to_domain_table[dom->next_ctx->prev_domain_idx];
 
-	domain_context_exit(dom->next_ctx, rc);
-}
+    /* Restore original domain */
+	domain_switch(tdom);
 
-int sbi_reentrant_domain_init(struct sbi_scratch *scratch)
-{
-	int rc;
-    u32 i;
-    struct sbi_domain *tdom;
+    if (hartmask_empty(&tdom->pinned_harts)) {
+        domain_context_swap(dom->next_ctx);
+        return;
+    }
 
-    sbi_domain_for_each(i, tdom) {
-        if(tdom->reentrant) {
+	sbi_hartmask_clear_hartindex(current_hartid(), &tdom->pinned_harts);
+    if (hartmask_empty(&tdom->pinned_harts)) {
+        if (tdom->boot_hartid == current_hartid()) {
+            
+            /* Initialize context for domain */
+            val = csr_read(CSR_MSTATUS);
+            val = INSERT_FIELD(val, MSTATUS_MPP, tdom->next_mode);
+            val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+
+            /* Setup secure M-mode CSR context */
+            dom->next_ctx->regs.mstatus = val;
+            dom->next_ctx->regs.mepc = tdom->next_addr;
+
+            /* Setup secure S-mode CSR context */
+            dom->next_ctx->csr_stvec = tdom->next_addr;
+
+            /* Setup boot arguments */
+            dom->next_ctx->regs.a0 = current_hartid();
+            dom->next_ctx->regs.a1 = tdom->next_arg1;
+
             /* clear pending interrupts */
             csr_read_clear(CSR_MIP, MIP_MTIP);
             csr_read_clear(CSR_MIP, MIP_STIP);
             csr_read_clear(CSR_MIP, MIP_SSIP);
             csr_read_clear(CSR_MIP, MIP_SEIP);
 
-            __asm__ __volatile__("sfence.vma" : : : "memory");
-
-            /* Init reentrant domain */
-            if ((rc = sbi_domain_resume(i)))
-                return rc;
+            domain_context_swap(dom->next_ctx);
+        } else {
+            // TODO:
+            wfi();
         }
     }
-
-	return 0;
 }
