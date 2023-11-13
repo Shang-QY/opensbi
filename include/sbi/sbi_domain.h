@@ -173,6 +173,8 @@ struct sbi_domain_context {
 	uint64_t csr_satp;
 	/** Previous caller domain index */
 	u32 prev_domain_idx;
+	/** Previous caller domain status, 0 indicate uninitialized */
+	u32 prev_domain_stat;
 	spinlock_t state_lock;
 };
 
@@ -189,8 +191,6 @@ struct sbi_domain {
 	 * in the coldboot path
 	 */
 	struct sbi_hartmask assigned_harts;
-	/** Pinned HARTs by reentrant domains during their boot stage */
-	struct sbi_hartmask pinned_harts;
 	/** Name of this domain */
 	char name[64];
 	/** Possible HARTs in this domain */
