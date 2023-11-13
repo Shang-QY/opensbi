@@ -12,6 +12,7 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_context_mgmr.h>
 
 struct sbi_scratch;
 
@@ -186,6 +187,10 @@ struct sbi_domain {
 	unsigned long next_addr;
 	/** Privilege mode of next booting stage for this domain */
 	unsigned long next_mode;
+	/** Is context manager is enabled */
+	bool context_mgmr_enabled;
+	/** Context for this the domain */
+	struct sbi_context_smode *next_ctx;
 	/** Is domain allowed to reset the system */
 	bool system_reset_allowed;
 	/** Is domain allowed to suspend the system */
@@ -324,5 +329,8 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
+
+/** Bind hart to the domain */
+void sbi_domain_bind_hartid(u32 hartindex, struct sbi_domain *dom);
 
 #endif

@@ -15,6 +15,7 @@
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_heap.h>
 #include <sbi/sbi_scratch.h>
+#include <sbi/sbi_context_mgmr.h>
 #include <sbi_utils/fdt/fdt_domain.h>
 #include <sbi_utils/fdt/fdt_helper.h>
 
@@ -473,6 +474,16 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 
 		if (doffset == domain_offset)
 			sbi_hartmask_set_hartid(val32, &assign_mask);
+	}
+
+	/* Read "context_mgmr_enabled" DT property */
+	if (fdt_get_property(fdt, domain_offset, "context_mgmr_enabled", NULL)) {
+		dom->context_mgmr_enabled = true;
+		dom->next_ctx = sbi_zalloc(sizeof(struct sbi_context_smode));
+		if (!dom->next_ctx) {
+			err = SBI_ENOMEM;
+			goto fail_free_all;
+		}
 	}
 
 	/* Register the domain */
