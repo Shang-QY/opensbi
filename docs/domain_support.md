@@ -205,12 +205,10 @@ The DT properties of a domain instance DT node are as follows:
 * **reentrant** (Optional) - When this option is turned on, the domain no
   longer monopolizes a set of cores (hart assignment is illegal), and its
   context is managed by the domain module and scheduled on demand, thus
-  working as a low-privilege system runtime. Reentrant domains are always
-  started by cold boot hart before the end of the cold boot, and domain_suspend
-  and domain_resume are used to transfer the current core or resume execution
-  on the current core. Currently, reentrant domains only support migratory
-  unified contexts, and reentrant requests on multiple cores will be
-  synchronized.
+  working as a low-privilege system runtime. Domain_suspend and domain_resume
+  are used to transfer the current core or resume execution on the current
+  core. Currently, reentrant domains only support migratory unified contexts,
+  and reentrant requests on multiple cores will be synchronized.
 
 ### Assigning HART To Domain Instance
 

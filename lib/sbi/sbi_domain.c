@@ -685,7 +685,6 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 {
 	int rc;
 	u32 i, dhart;
-	unsigned long val;
 	struct sbi_domain *dom;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
@@ -696,8 +695,6 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 			   __func__, rc);
 		return rc;
 	}
-
-    // TODO: test domain contains cold boot hart is not pinned.
 
 	/* Startup boot HART of domains */
 	sbi_domain_for_each(i, dom) {
@@ -848,15 +845,15 @@ fail_free_domain_hart_ptr_offset:
 
 static void domain_context_swap(struct sbi_domain_context *ctx)
 {
-	uintptr_t tmp;
+	unsigned long val;
 
 	/* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
 	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
 	for (int i = 0; i < SBI_TRAP_REGS_SIZE / __SIZEOF_POINTER__; ++i) {
-		tmp = prev[i];
+		val = prev[i];
 		prev[i] = trap_regs[i];
-		trap_regs[i] = tmp;
+		trap_regs[i] = val;
 	}
 
 	/* Save Secure Partition's CSR context and restore original CSR context */
@@ -864,6 +861,12 @@ static void domain_context_swap(struct sbi_domain_context *ctx)
 	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
 	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
 	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
+
+	/* clear pending interrupts */
+	csr_read_clear(CSR_MIP, MIP_MTIP);
+	csr_read_clear(CSR_MIP, MIP_STIP);
+	csr_read_clear(CSR_MIP, MIP_SSIP);
+	csr_read_clear(CSR_MIP, MIP_SEIP);
 }
 
 static void domain_switch(struct sbi_domain *target_dom)
@@ -885,7 +888,13 @@ static void domain_switch(struct sbi_domain *target_dom)
 uint64_t sbi_domain_resume(u32 domain_index)
 {
 	uint64_t rc = 0;
+	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	struct sbi_domain *tdom = domidx_to_domain_table[domain_index];
+
+	if (!tdom || !tdom->reentrant)
+		return SBI_EINVAL;
+
+	tdom->next_ctx->prev_domain_idx = dom->index;
 
 	/* Switch to target domain*/
 	domain_switch(tdom);
@@ -929,15 +938,8 @@ void sbi_domain_suspend(uint64_t rc)
 			dom->next_ctx->regs.a0 = current_hartid();
 			dom->next_ctx->regs.a1 = tdom->next_arg1;
 
-			/* clear pending interrupts */
-			csr_read_clear(CSR_MIP, MIP_MTIP);
-			csr_read_clear(CSR_MIP, MIP_STIP);
-			csr_read_clear(CSR_MIP, MIP_SSIP);
-			csr_read_clear(CSR_MIP, MIP_SEIP);
-
 			domain_context_swap(dom->next_ctx);
 		} else {
-			// TODO:
 			wfi();
 		}
 	}
