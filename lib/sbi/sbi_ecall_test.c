@@ -14,7 +14,7 @@
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_console.h>
 #include <sbi/sbi_string.h>
-#include <sbi/sbi_context_mgmr.h>
+#include <sbi/sbi_context_mgmt.h>
 
 #define SECURE_DOMAIN   "trusted-domain"
 

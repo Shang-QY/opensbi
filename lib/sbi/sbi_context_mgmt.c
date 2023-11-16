@@ -17,7 +17,7 @@
 #include <sbi/riscv_asm.h>
 #include <sbi/sbi_console.h>
 #include <sbi/sbi_domain.h>
-#include <sbi/sbi_context_mgmr.h>
+#include <sbi/sbi_context_mgmt.h>
 
 /** Assembly helpers */
 uint64_t cpu_smode_context_enter(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);

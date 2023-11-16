@@ -13,7 +13,7 @@
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_trap.h>
 
-typedef struct sbi_context_smode {
+struct sbi_context_smode {
 	/** secure context for all general registers */
 	struct sbi_trap_regs regs;
 	/** secure context for S mode CSR registers */
@@ -23,10 +23,10 @@ typedef struct sbi_context_smode {
 	uint64_t csr_satp;
 	/**
 	 * stack address to restore C runtime context from after
-	 * returning from a synchronous entry into Secure Partition.
+	 * returning from a synchronous entry into domain context.
 	 */
 	uintptr_t c_rt_ctx;
-} sbi_context_smode_t;
+};
 
 uint64_t sbi_context_smode_enter(u32 domain_index) ;
 
