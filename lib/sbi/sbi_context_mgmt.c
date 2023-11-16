@@ -91,6 +91,29 @@ void sbi_context_smode_exit(uint64_t rc)
 	cpu_smode_context_exit(ctx->c_rt_ctx, rc);
 }
 
+static void assign_context_to_domain(struct sbi_domain *dom)
+{
+	unsigned long val;
+	val = csr_read(CSR_MSTATUS);
+	val = INSERT_FIELD(val, MSTATUS_MPP, dom->next_mode);
+	val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
+
+	/* Setup secure M-mode CSR context */
+	dom->next_ctx->regs.mstatus = val;
+
+	dom->next_ctx->regs.mepc = dom->next_addr;
+
+	/* Setup secure S-mode CSR context */
+	dom->next_ctx->csr_stvec = dom->next_addr;
+	dom->next_ctx->csr_sscratch = 0;
+	dom->next_ctx->csr_sie = 0;
+	dom->next_ctx->csr_satp = 0;
+
+	/* Setup boot arguments */
+	dom->next_ctx->regs.a0 = current_hartid();
+	dom->next_ctx->regs.a1 = dom->next_arg1;
+}
+
 int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 {
 	int rc;
@@ -99,6 +122,8 @@ int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 
 	sbi_domain_for_each(i, dom) {
 		if(dom->context_mgmt_enabled) {
+			assign_context_to_domain(dom);
+
 			/* clear pending interrupts */
 			csr_read_clear(CSR_MIP, MIP_MTIP);
 			csr_read_clear(CSR_MIP, MIP_STIP);

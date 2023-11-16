@@ -62,29 +62,6 @@ static void update_hartindex_to_domain(u32 hartindex, struct sbi_domain *dom)
 	sbi_scratch_write_type(scratch, void *, domain_hart_ptr_offset, dom);
 }
 
-static void assign_context_to_domain(struct sbi_domain *dom)
-{
-	unsigned long val;
-	val = csr_read(CSR_MSTATUS);
-	val = INSERT_FIELD(val, MSTATUS_MPP, dom->next_mode);
-	val = INSERT_FIELD(val, MSTATUS_MPIE, 0);
-
-	/* Setup secure M-mode CSR context */
-	dom->next_ctx->regs.mstatus = val;
-
-	dom->next_ctx->regs.mepc = dom->next_addr;
-
-	/* Setup secure S-mode CSR context */
-	dom->next_ctx->csr_stvec = dom->next_addr;
-	dom->next_ctx->csr_sscratch = 0;
-	dom->next_ctx->csr_sie = 0;
-	dom->next_ctx->csr_satp = 0;
-
-	/* Setup boot arguments */
-	dom->next_ctx->regs.a0 = current_hartid();
-	dom->next_ctx->regs.a1 = dom->next_arg1;
-}
-
 bool sbi_domain_is_assigned_hart(const struct sbi_domain *dom, u32 hartid)
 {
 	if (dom)
@@ -555,6 +532,9 @@ int sbi_domain_register(struct sbi_domain *dom,
 	/* Clear assigned HARTs of domain */
 	sbi_hartmask_clear_all(&dom->assigned_harts);
 
+	if(dom->context_mgmt_enabled)
+		return 0;
+
 	/* Assign domain to HART if HART is a possible HART */
 	sbi_hartmask_for_each_hartindex(i, assign_mask) {
 		if (!sbi_hartmask_test_hartindex(i, dom->possible_harts))
@@ -695,11 +675,8 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 		dhart = sbi_hartid_to_hartindex(dom->boot_hartid);
 
 		/* Ignore of boot HART is off limits */
-		if (!sbi_hartindex_valid(dhart)) {
-			if(dom->context_mgmr_enabled)
-				assign_context_to_domain(dom);
+		if (!sbi_hartindex_valid(dhart))
 			continue;
-		}
 
 		/* Ignore if boot HART not possible for this domain */
 		if (!sbi_hartmask_test_hartindex(dhart, dom->possible_harts))
