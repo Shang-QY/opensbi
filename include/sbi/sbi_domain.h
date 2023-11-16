@@ -243,6 +243,13 @@ ulong sbi_domain_get_assigned_hartmask(const struct sbi_domain *dom,
 				       ulong hbase);
 
 /**
+ * Assign given HART to specified domain
+ * @param dom pointer to domain
+ * @param hartid the HART ID
+ */
+void sbi_domain_assign_hart(struct sbi_domain *dom, u32 hartid);
+
+/**
  * Initialize a domain memory region based on it's physical
  * address and size.
  *
@@ -329,8 +336,5 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
-
-/** Bind hart to the domain */
-void sbi_domain_bind_hartid(u32 hartindex, struct sbi_domain *dom);
 
 #endif

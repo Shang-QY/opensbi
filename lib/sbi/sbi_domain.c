@@ -82,6 +82,21 @@ ulong sbi_domain_get_assigned_hartmask(const struct sbi_domain *dom,
 	return ret;
 }
 
+void sbi_domain_assign_hart(struct sbi_domain *dom, u32 hartid)
+{
+	struct sbi_domain *tdom;
+	u32 hartindex = sbi_hartid_to_hartindex(hartid);
+
+	if (!dom || !sbi_hartindex_valid(hartindex))
+		return;
+
+	tdom = sbi_hartindex_to_domain(hartindex);
+	if (tdom)
+		sbi_hartmask_clear_hartindex(hartindex, &tdom->assigned_harts);
+	update_hartindex_to_domain(hartindex, dom);
+	sbi_hartmask_set_hartindex(hartindex, &dom->assigned_harts);
+}
+
 void sbi_domain_memregion_init(unsigned long addr,
 				unsigned long size,
 				unsigned long flags,
@@ -532,6 +547,10 @@ int sbi_domain_register(struct sbi_domain *dom,
 	/* Clear assigned HARTs of domain */
 	sbi_hartmask_clear_all(&dom->assigned_harts);
 
+	/*
+	 * Early return to skip the assign hart operation
+	 * for context_mgmt_enabled domain
+	 */
 	if(dom->context_mgmt_enabled)
 		return 0;
 
@@ -815,9 +834,3 @@ fail_free_domain_hart_ptr_offset:
 	sbi_scratch_free_offset(domain_hart_ptr_offset);
 	return rc;
 }
-
-void sbi_domain_bind_hartid(u32 hartindex, struct sbi_domain *dom)
-{
-	return update_hartindex_to_domain(hartindex, dom);
-}
-
