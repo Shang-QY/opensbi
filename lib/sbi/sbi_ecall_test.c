@@ -20,17 +20,17 @@
 
 static int sbi_ecall_test_secure_enter(void)
 {
-    int i;
-    struct sbi_domain *dom, *tdom = NULL;
-    sbi_domain_for_each(i, dom)
+	int i;
+	struct sbi_domain *dom, *tdom = NULL;
+	sbi_domain_for_each(i, dom)
 	{
 		if (!sbi_strcmp(dom->name, SECURE_DOMAIN)) {
 			tdom = dom;
-            break;
+			break;
 		}
 	}
-    if (tdom)
-	    sbi_context_smode_enter(tdom->index);
+	if (tdom)
+		sbi_context_smode_enter(tdom->index);
 	return 0;
 }
 

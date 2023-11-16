@@ -4,19 +4,11 @@
  * Copyright (c) IPADS@SJTU 2023. All rights reserved.
  */
 
-#include <libfdt.h>
-#include <libfdt_env.h>
-#include <sbi/sbi_math.h>
 #include <sbi/sbi_error.h>
 #include <sbi/riscv_asm.h>
-#include <sbi/sbi_trap.h>
 #include <sbi/sbi_hart.h>
-#include <sbi/sbi_console.h>
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_hartmask.h>
-#include <sbi/riscv_asm.h>
-#include <sbi/sbi_console.h>
-#include <sbi/sbi_domain.h>
 #include <sbi/sbi_context_mgmt.h>
 
 /** Assembly helpers */
@@ -92,34 +84,33 @@ void sbi_context_smode_exit(uint64_t rc)
 	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
 
 	/*
-	 * The DD manager must have initiated the original request through a
-	 * synchronous entry into the secure partition. Jump back to the
+	 * The context manager must have initiated the original request through a
+	 * synchronous entry into the domain context. Jump back to the
 	 * original C runtime context with the value of rc in a0;
 	 */
 	cpu_smode_context_exit(ctx->c_rt_ctx, rc);
 }
 
-int sbi_context_mgmr_init(struct sbi_scratch *scratch)
+int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 {
 	int rc;
-    u32 i;
-    struct sbi_domain *dom;
+	u32 i;
+	struct sbi_domain *dom;
 
-    sbi_domain_for_each(i, dom) {
-        if(dom->context_mgmr_enabled) {
-            /* clear pending interrupts */
-            csr_read_clear(CSR_MIP, MIP_MTIP);
-            csr_read_clear(CSR_MIP, MIP_STIP);
-            csr_read_clear(CSR_MIP, MIP_SSIP);
-            csr_read_clear(CSR_MIP, MIP_SEIP);
+	sbi_domain_for_each(i, dom) {
+		if(dom->context_mgmr_enabled) {
+			/* clear pending interrupts */
+			csr_read_clear(CSR_MIP, MIP_MTIP);
+			csr_read_clear(CSR_MIP, MIP_STIP);
+			csr_read_clear(CSR_MIP, MIP_SSIP);
+			csr_read_clear(CSR_MIP, MIP_SEIP);
 
-            __asm__ __volatile__("sfence.vma" : : : "memory");
+			__asm__ __volatile__("sfence.vma" : : : "memory");
 
-            /* Init reentrant domain */
-            if ((rc = sbi_context_smode_enter(i)))
-                return rc;
-        }
-    }
+			/* Init domain */
+			if ((rc = sbi_context_smode_enter(i)))
+				return rc;
+		}
+	}
 	return 0;
 }
-

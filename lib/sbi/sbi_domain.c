@@ -17,8 +17,6 @@
 #include <sbi/sbi_platform.h>
 #include <sbi/sbi_scratch.h>
 #include <sbi/sbi_string.h>
-#include <sbi/sbi_hart.h>
-
 
 /*
  * We allocate an extra element because sbi_domain_for_each() expects
