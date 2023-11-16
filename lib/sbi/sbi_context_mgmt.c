@@ -98,7 +98,7 @@ int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 	struct sbi_domain *dom;
 
 	sbi_domain_for_each(i, dom) {
-		if(dom->context_mgmr_enabled) {
+		if(dom->context_mgmt_enabled) {
 			/* clear pending interrupts */
 			csr_read_clear(CSR_MIP, MIP_MTIP);
 			csr_read_clear(CSR_MIP, MIP_STIP);

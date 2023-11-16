@@ -188,7 +188,7 @@ struct sbi_domain {
 	/** Privilege mode of next booting stage for this domain */
 	unsigned long next_mode;
 	/** Is context manager is enabled */
-	bool context_mgmr_enabled;
+	bool context_mgmt_enabled;
 	/** Context for this domain */
 	struct sbi_context_smode *next_ctx;
 	/** Is domain allowed to reset the system */

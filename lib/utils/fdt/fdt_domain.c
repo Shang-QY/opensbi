@@ -475,9 +475,9 @@ static int __fdt_parse_domain(void *fdt, int domain_offset, void *opaque)
 			sbi_hartmask_set_hartid(val32, &assign_mask);
 	}
 
-	/* Read "context_mgmr_enabled" DT property */
-	if (fdt_get_property(fdt, domain_offset, "context_mgmr_enabled", NULL)) {
-		dom->context_mgmr_enabled = true;
+	/* Read "context_mgmt_enabled" DT property */
+	if (fdt_get_property(fdt, domain_offset, "context_mgmt_enabled", NULL)) {
+		dom->context_mgmt_enabled = true;
 		dom->next_ctx = sbi_zalloc(sizeof(struct sbi_context_smode));
 		if (!dom->next_ctx) {
 			err = SBI_ENOMEM;
