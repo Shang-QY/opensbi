@@ -15,29 +15,21 @@
 uint64_t cpu_smode_context_enter(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
 void cpu_smode_context_exit(uint64_t c_rt_ctx, uint64_t ret);
 
-static int sbi_context_pmp_reconfigure(void)
-{
-	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
-	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
-
-	for(int i = 0; i < pmp_count; i++) {
-		pmp_disable(i);
-	}
-	sbi_hart_pmp_configure(scratch);
-
-	return 0;
-}
-
 uint64_t sbi_context_smode_enter(u32 index)
 {
 	uint64_t rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	struct sbi_domain *tdom = domidx_to_domain_table[index];
 	struct sbi_context_smode *ctx = tdom->next_ctx;
+	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
+	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
 
-	/* Switch to target domain*/
+	/* Switch to target domain */
 	sbi_domain_assign_hart(tdom, current_hartid());
-	sbi_context_pmp_reconfigure();
+	for(int i = 0; i < pmp_count; i++) {
+		pmp_disable(i);
+	}
+	sbi_hart_pmp_configure(scratch);
 
 	/* Save current CSR context and setup Secure Partition's CSR context */
 	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
@@ -49,7 +41,10 @@ uint64_t sbi_context_smode_enter(u32 index)
 
 	/* Restore original domain */
 	sbi_domain_assign_hart(dom, current_hartid());
-	sbi_context_pmp_reconfigure();
+	for(int i = 0; i < pmp_count; i++) {
+		pmp_disable(i);
+	}
+	sbi_hart_pmp_configure(scratch);
 
 	return rc;
 }
@@ -58,6 +53,9 @@ void sbi_context_smode_exit(uint64_t rc)
 {
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	struct sbi_context_smode *ctx = dom->next_ctx;
+
+	if (!dom->context_mgmt_enabled || !ctx)
+		return;
 
 	/* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
@@ -87,7 +85,7 @@ void sbi_context_smode_exit(uint64_t rc)
 	cpu_smode_context_exit(ctx->c_rt_ctx, rc);
 }
 
-static void assign_context_to_domain(struct sbi_domain *dom)
+static void domain_context_setup(struct sbi_domain *dom)
 {
 	unsigned long val;
 	val = csr_read(CSR_MSTATUS);
@@ -96,7 +94,6 @@ static void assign_context_to_domain(struct sbi_domain *dom)
 
 	/* Setup secure M-mode CSR context */
 	dom->next_ctx->regs.mstatus = val;
-
 	dom->next_ctx->regs.mepc = dom->next_addr;
 
 	/* Setup secure S-mode CSR context */
@@ -118,15 +115,8 @@ int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 
 	sbi_domain_for_each(i, dom) {
 		if(dom->context_mgmt_enabled) {
-			assign_context_to_domain(dom);
-
-			/* clear pending interrupts */
-			csr_read_clear(CSR_MIP, MIP_MTIP);
-			csr_read_clear(CSR_MIP, MIP_STIP);
-			csr_read_clear(CSR_MIP, MIP_SSIP);
-			csr_read_clear(CSR_MIP, MIP_SEIP);
-
-			__asm__ __volatile__("sfence.vma" : : : "memory");
+			/* Init domain */
+			domain_context_setup(dom);
 
 			/* Init domain */
 			if ((rc = sbi_context_smode_enter(i)))
