@@ -20,7 +20,7 @@ struct sbi_context_smode {
 	uint64_t csr_satp;
 	/**
 	 * Stack address to restore M-mode C runtime context from after
-	 * returning from a synchronous entry into domain context.
+	 * returning from a synchronous enter into domain context.
 	 */
 	uintptr_t c_rt_ctx;
 };

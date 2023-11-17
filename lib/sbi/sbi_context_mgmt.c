@@ -12,17 +12,18 @@
 #include <sbi/sbi_context_mgmt.h>
 
 /** Assembly helpers */
-uint64_t cpu_lowlevel_context_enter(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
+uint64_t cpu_lowlevel_context_enter(struct sbi_trap_regs *regs,
+				    uint64_t *c_rt_ctx);
 void cpu_lowlevel_context_exit(uint64_t c_rt_ctx, uint64_t ret);
 
 uint64_t sbi_context_domain_context_enter(u32 domain_index)
 {
 	uint64_t rc;
 	struct sbi_context_smode *ctx;
-	struct sbi_domain *dom = sbi_index_to_domain(domain_index);
-	struct sbi_domain *tdom = sbi_domain_thishart_ptr();
+	struct sbi_domain *dom	    = sbi_index_to_domain(domain_index);
+	struct sbi_domain *tdom	    = sbi_domain_thishart_ptr();
 	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
-	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
+	unsigned int pmp_count	    = sbi_hart_pmp_count(scratch);
 
 	if (!dom || !dom->context_mgmt_enabled || !dom->next_ctx)
 		return SBI_EINVAL;
@@ -31,17 +32,18 @@ uint64_t sbi_context_domain_context_enter(u32 domain_index)
 	sbi_domain_assign_hart(dom, current_hartid());
 
 	/* PMP reconfiguration */
-	for(int i = 0; i < pmp_count; i++) {
+	for (int i = 0; i < pmp_count; i++) {
 		pmp_disable(i);
 	}
 	sbi_hart_pmp_configure(scratch);
 
 	ctx = dom->next_ctx;
-	/* Save current CSR context and setup Secure Partition's CSR context */
-	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
+
+	/* Save current CSR context and setup target domain's CSR context */
+	ctx->csr_stvec	  = csr_swap(CSR_STVEC, ctx->csr_stvec);
 	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
-	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
-	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
+	ctx->csr_sie	  = csr_swap(CSR_SIE, ctx->csr_sie);
+	ctx->csr_satp	  = csr_swap(CSR_SATP, ctx->csr_satp);
 
 	rc = cpu_lowlevel_context_enter(&ctx->regs, &ctx->c_rt_ctx);
 
@@ -49,7 +51,7 @@ uint64_t sbi_context_domain_context_enter(u32 domain_index)
 	sbi_domain_assign_hart(tdom, current_hartid());
 
 	/* PMP reconfiguration */
-	for(int i = 0; i < pmp_count; i++) {
+	for (int i = 0; i < pmp_count; i++) {
 		pmp_disable(i);
 	}
 	sbi_hart_pmp_configure(scratch);
@@ -59,7 +61,7 @@ uint64_t sbi_context_domain_context_enter(u32 domain_index)
 
 void sbi_context_domain_context_exit(uint64_t rc)
 {
-	struct sbi_domain *dom = sbi_domain_thishart_ptr();
+	struct sbi_domain *dom	      = sbi_domain_thishart_ptr();
 	struct sbi_context_smode *ctx = dom->next_ctx;
 
 	if (!dom->context_mgmt_enabled || !ctx)
@@ -67,7 +69,8 @@ void sbi_context_domain_context_exit(uint64_t rc)
 
 	/* Save secure state */
 	uintptr_t *prev = (uintptr_t *)&ctx->regs;
-	uintptr_t *trap_regs = (uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
+	uintptr_t *trap_regs =
+		(uintptr_t *)(csr_read(CSR_MSCRATCH) - SBI_TRAP_REGS_SIZE);
 	for (int i = 0; i < SBI_TRAP_REGS_SIZE / __SIZEOF_POINTER__; ++i) {
 		prev[i] = trap_regs[i];
 	}
@@ -80,10 +83,10 @@ void sbi_context_domain_context_exit(uint64_t rc)
 	ctx->regs.mepc = ctx->regs.mepc + 4;
 
 	/* Save Secure Partition's CSR context and restore original CSR context */
-	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
+	ctx->csr_stvec	  = csr_swap(CSR_STVEC, ctx->csr_stvec);
 	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
-	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
-	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
+	ctx->csr_sie	  = csr_swap(CSR_SIE, ctx->csr_sie);
+	ctx->csr_satp	  = csr_swap(CSR_SATP, ctx->csr_satp);
 
 	/*
 	 * The context manager must have initiated the original request through a
@@ -102,13 +105,13 @@ static void domain_context_setup(struct sbi_domain *dom)
 
 	/* Setup secure M-mode CSR context */
 	dom->next_ctx->regs.mstatus = val;
-	dom->next_ctx->regs.mepc = dom->next_addr;
+	dom->next_ctx->regs.mepc    = dom->next_addr;
 
 	/* Setup secure S-mode CSR context */
-	dom->next_ctx->csr_stvec = dom->next_addr;
+	dom->next_ctx->csr_stvec    = dom->next_addr;
 	dom->next_ctx->csr_sscratch = 0;
-	dom->next_ctx->csr_sie = 0;
-	dom->next_ctx->csr_satp = 0;
+	dom->next_ctx->csr_sie	    = 0;
+	dom->next_ctx->csr_satp	    = 0;
 
 	/* Setup boot arguments */
 	dom->next_ctx->regs.a0 = current_hartid();
@@ -122,7 +125,7 @@ int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 	struct sbi_domain *dom;
 
 	sbi_domain_for_each(i, dom) {
-		if(dom->context_mgmt_enabled) {
+		if (dom->context_mgmt_enabled) {
 			/* Init domain */
 			domain_context_setup(dom);
 
