@@ -15,22 +15,28 @@
 uint64_t cpu_lowlevel_context_enter(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
 void cpu_lowlevel_context_exit(uint64_t c_rt_ctx, uint64_t ret);
 
-uint64_t sbi_context_domain_context_enter(u32 index)
+uint64_t sbi_context_domain_context_enter(u32 domain_index)
 {
 	uint64_t rc;
-	struct sbi_domain *dom = sbi_domain_thishart_ptr();
-	struct sbi_domain *tdom = domidx_to_domain_table[index];
-	struct sbi_context_smode *ctx = tdom->next_ctx;
+	struct sbi_context_smode *ctx;
+	struct sbi_domain *dom = sbi_index_to_domain(domain_index);
+	struct sbi_domain *tdom = sbi_domain_thishart_ptr();
 	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
 	unsigned int pmp_count = sbi_hart_pmp_count(scratch);
 
+	if (!dom || !dom->context_mgmt_enabled || !dom->next_ctx)
+		return SBI_EINVAL;
+
 	/* Switch to target domain */
-	sbi_domain_assign_hart(tdom, current_hartid());
+	sbi_domain_assign_hart(dom, current_hartid());
+
+	/* PMP reconfiguration */
 	for(int i = 0; i < pmp_count; i++) {
 		pmp_disable(i);
 	}
 	sbi_hart_pmp_configure(scratch);
 
+	ctx = dom->next_ctx;
 	/* Save current CSR context and setup Secure Partition's CSR context */
 	ctx->csr_stvec    = csr_swap(CSR_STVEC, ctx->csr_stvec);
 	ctx->csr_sscratch = csr_swap(CSR_SSCRATCH, ctx->csr_sscratch);
@@ -40,7 +46,9 @@ uint64_t sbi_context_domain_context_enter(u32 index)
 	rc = cpu_lowlevel_context_enter(&ctx->regs, &ctx->c_rt_ctx);
 
 	/* Restore original domain */
-	sbi_domain_assign_hart(dom, current_hartid());
+	sbi_domain_assign_hart(tdom, current_hartid());
+
+	/* PMP reconfiguration */
 	for(int i = 0; i < pmp_count; i++) {
 		pmp_disable(i);
 	}
