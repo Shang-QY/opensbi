@@ -10,13 +10,12 @@
 	.align 3
 	.global cpu_lowlevel_context_enter
 
-	/* ---------------------------------------------------------------------
+	/*
 	 * This function is called with M-mode runtime stack. Here we stash our
 	 * callee-saved registers on to the stack as a part of saving the C
-	 * runtime and enter the secure domain payload.
-	 * 'x0' contains a pointer to the memory where the address of the C
-	 *  runtime context is to be saved.
-	 * ---------------------------------------------------------------------
+	 * runtime and enter the domain context.
+	 * 'a0' contains a pointer to the memory where the address of the C
+	 * runtime context is to be saved.
 	 */
 cpu_lowlevel_context_enter:
 	/* Make space for the registers that we're going to save */
@@ -54,36 +53,34 @@ cpu_lowlevel_context_enter:
 	REG_S	tp, SBI_TRAP_REGS_OFFSET(sp)(sp)
 
 	/* Set MSCRATCH register to current runtime stack */
-	/* Make space for the struct sbi_scratch that will be used in next _trap_handler */
+	/* Make space for struct sbi_scratch used in next _trap_handler */
 	li	a5, SBI_SCRATCH_SIZE
 	sub	tp, sp, a5
 	/* Swap TP and MSCRATCH */
 	csrrw	tp, CSR_MSCRATCH, tp
 
-	/* ---------------------------------------------------------------------
-	 * Everything is setup now. _trap_exit() will use the secure context to
-	 * restore to the general purpose and system registers to MRET into
-	 * the secure payload.
-	 * ---------------------------------------------------------------------
+	/*
+	 * Everything is setup now. _trap_exit() will use the sbi_trap_regs to
+	 * restore to the general purpose and system registers to mret into
+	 * the domain.
 	 */
 	call	_trap_exit
 
 	.align 3
 	.global cpu_lowlevel_context_exit
-	/* ---------------------------------------------------------------------
-	 * This function is called with 'x0' pointing to a C runtime context
-	 * saved in context_enter_helper().
-	 * It restores the saved registers and jumps to that runtime with 'x0'
+	/*
+	 * This function is called with 'a0' pointing to a C runtime context
+	 * saved in cpu_lowlevel_context_enter().
+	 * It restores the saved registers and jumps to that runtime with 'a0'
 	 * as the new SP register. This destroys the C runtime context that had
 	 * been built on the stack below the saved context by the caller. Later
-	 * the second parameter 'x1' is passed as a return value to the caller.
-	 * ---------------------------------------------------------------------
+	 * the second parameter 'a1' is passed as a return value to the caller.
 	 */
 cpu_lowlevel_context_exit:
 	/* Restore the previous stack */
 	add	sp, a0, 0
 
-	/* Restore original MSCRATCH register from the stack (use `sp` field) */
+	/* Restore original MSCRATCH register from the stack (use 'sp' field) */
 	REG_L	tp, (SBI_TRAP_REGS_OFFSET(sp) - SBI_TRAP_REGS_SIZE)(sp)
 	/* Swap TP and MSCRATCH */
 	csrrw	tp, CSR_MSCRATCH, tp
@@ -110,15 +107,14 @@ cpu_lowlevel_context_exit:
 	REG_L	t0, (SBI_TRAP_REGS_OFFSET(mstatus) - SBI_TRAP_REGS_SIZE)(sp)
 	csrw	CSR_MSTATUS, t0
 
-	/* Restore Return address registers from the stack */
+	/* Restore Return Address registers from the stack */
 	REG_L	ra, (SBI_TRAP_REGS_OFFSET(ra) - SBI_TRAP_REGS_SIZE)(sp)
 
-	/* ---------------------------------------------------------------------
+	/*
 	 * This should take us back to the instruction after the call to the
-	 * last context_enter_helper().* Place the second parameter to a0
+	 * last cpu_lowlevel_context_enter().* Place the second parameter to a0
 	 * so that the caller will see it as a return value from the original
 	 * entry call.
-	 * ---------------------------------------------------------------------
 	 */
 	add	a0, a1, 0
 	ret

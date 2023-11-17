@@ -126,10 +126,10 @@ int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 
 	sbi_domain_for_each(i, dom) {
 		if (dom->context_mgmt_enabled) {
-			/* Init domain */
+			/* Initialize context of domain */
 			domain_context_setup(dom);
 
-			/* Init domain */
+			/* Jump to domain for the first time as boot-up */
 			if ((rc = sbi_context_domain_context_enter(i)))
 				return rc;
 		}
