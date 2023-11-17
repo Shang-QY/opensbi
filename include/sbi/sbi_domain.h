@@ -190,7 +190,7 @@ struct sbi_domain {
 	/** Is context manager is enabled */
 	bool context_mgmt_enabled;
 	/** Context for this domain */
-	struct sbi_context_smode *next_ctx;
+	struct sbi_context *next_ctx;
 	/** Is domain allowed to reset the system */
 	bool system_reset_allowed;
 	/** Is domain allowed to suspend the system */

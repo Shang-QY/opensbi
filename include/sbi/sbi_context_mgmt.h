@@ -10,7 +10,8 @@
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_trap.h>
 
-struct sbi_context_smode {
+/** Representation of low level hart context */
+struct sbi_context {
 	/** General registers, mepc and mstatus for trap state */
 	struct sbi_trap_regs regs;
 	/** S-mode CSR registers */
@@ -20,7 +21,7 @@ struct sbi_context_smode {
 	uint64_t csr_satp;
 	/**
 	 * Stack address to restore M-mode C runtime context from after
-	 * returning from a synchronous enter into domain context.
+	 * returning from a synchronous enter into this context.
 	 */
 	uintptr_t c_rt_ctx;
 };

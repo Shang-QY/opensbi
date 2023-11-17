@@ -19,13 +19,14 @@ void cpu_lowlevel_context_exit(uint64_t c_rt_ctx, uint64_t ret);
 uint64_t sbi_context_domain_context_enter(u32 domain_index)
 {
 	uint64_t rc;
-	struct sbi_context_smode *ctx;
+	struct sbi_context *ctx;
 	struct sbi_domain *dom	    = sbi_index_to_domain(domain_index);
 	struct sbi_domain *tdom	    = sbi_domain_thishart_ptr();
 	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
 	unsigned int pmp_count	    = sbi_hart_pmp_count(scratch);
 
-	if (!dom || !dom->context_mgmt_enabled || !dom->next_ctx)
+	if (SBI_DOMAIN_MAX_INDEX <= domain_index || !dom ||
+	    !dom->context_mgmt_enabled || !dom->next_ctx)
 		return SBI_EINVAL;
 
 	/* Switch to target domain */
@@ -61,8 +62,8 @@ uint64_t sbi_context_domain_context_enter(u32 domain_index)
 
 void sbi_context_domain_context_exit(uint64_t rc)
 {
-	struct sbi_domain *dom	      = sbi_domain_thishart_ptr();
-	struct sbi_context_smode *ctx = dom->next_ctx;
+	struct sbi_domain *dom	= sbi_domain_thishart_ptr();
+	struct sbi_context *ctx = dom->next_ctx;
 
 	if (!dom->context_mgmt_enabled || !ctx)
 		return;
@@ -90,7 +91,7 @@ void sbi_context_domain_context_exit(uint64_t rc)
 
 	/*
 	 * The context manager must have initiated the original request through a
-	 * synchronous entry into the domain context. Jump back to the
+	 * synchronous enter into the domain context. Jump back to the
 	 * original C runtime context with the value of rc in a0;
 	 */
 	cpu_lowlevel_context_exit(ctx->c_rt_ctx, rc);
