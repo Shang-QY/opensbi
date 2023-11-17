@@ -117,6 +117,8 @@ int find_domain(void *fdt, int nodeoff, const char *compatible,
 		return SBI_EINVAL;
 	}
 
+    sbi_memset(name, 0, sizeof(name));
+
 	/* Read DT node name and find match */
 	strncpy(name, fdt_get_name(fdt, domain_offset, NULL), sizeof(name));
 	name[sizeof(name) - 1] = '\0';
