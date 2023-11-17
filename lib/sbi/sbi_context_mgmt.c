@@ -12,10 +12,10 @@
 #include <sbi/sbi_context_mgmt.h>
 
 /** Assembly helpers */
-uint64_t cpu_smode_context_enter(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
-void cpu_smode_context_exit(uint64_t c_rt_ctx, uint64_t ret);
+uint64_t cpu_lowlevel_context_enter(struct sbi_trap_regs *regs, uint64_t *c_rt_ctx);
+void cpu_lowlevel_context_exit(uint64_t c_rt_ctx, uint64_t ret);
 
-uint64_t sbi_context_smode_enter(u32 index)
+uint64_t sbi_context_domain_context_enter(u32 index)
 {
 	uint64_t rc;
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
@@ -37,7 +37,7 @@ uint64_t sbi_context_smode_enter(u32 index)
 	ctx->csr_sie      = csr_swap(CSR_SIE, ctx->csr_sie);
 	ctx->csr_satp     = csr_swap(CSR_SATP, ctx->csr_satp);
 
-	rc = cpu_smode_context_enter(&ctx->regs, &ctx->c_rt_ctx);
+	rc = cpu_lowlevel_context_enter(&ctx->regs, &ctx->c_rt_ctx);
 
 	/* Restore original domain */
 	sbi_domain_assign_hart(dom, current_hartid());
@@ -49,7 +49,7 @@ uint64_t sbi_context_smode_enter(u32 index)
 	return rc;
 }
 
-void sbi_context_smode_exit(uint64_t rc)
+void sbi_context_domain_context_exit(uint64_t rc)
 {
 	struct sbi_domain *dom = sbi_domain_thishart_ptr();
 	struct sbi_context_smode *ctx = dom->next_ctx;
@@ -82,7 +82,7 @@ void sbi_context_smode_exit(uint64_t rc)
 	 * synchronous entry into the domain context. Jump back to the
 	 * original C runtime context with the value of rc in a0;
 	 */
-	cpu_smode_context_exit(ctx->c_rt_ctx, rc);
+	cpu_lowlevel_context_exit(ctx->c_rt_ctx, rc);
 }
 
 static void domain_context_setup(struct sbi_domain *dom)
@@ -119,7 +119,7 @@ int sbi_context_mgmt_init(struct sbi_scratch *scratch)
 			domain_context_setup(dom);
 
 			/* Init domain */
-			if ((rc = sbi_context_smode_enter(i)))
+			if ((rc = sbi_context_domain_context_enter(i)))
 				return rc;
 		}
 	}

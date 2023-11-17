@@ -30,13 +30,13 @@ static int sbi_ecall_test_secure_enter(void)
 		}
 	}
 	if (tdom)
-		sbi_context_smode_enter(tdom->index);
+		sbi_context_domain_context_enter(tdom->index);
 	return 0;
 }
 
 static int sbi_ecall_test_secure_exit(void)
 {
-	sbi_context_smode_exit(0);
+	sbi_context_domain_context_exit(0);
 	return 0;
 }
 

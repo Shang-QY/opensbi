@@ -25,9 +25,9 @@ struct sbi_context_smode {
 	uintptr_t c_rt_ctx;
 };
 
-uint64_t sbi_context_smode_enter(u32 domain_index) ;
+uint64_t sbi_context_domain_context_enter(u32 domain_index) ;
 
-void sbi_context_smode_exit(uint64_t rc);
+void sbi_context_domain_context_exit(uint64_t rc);
 
 int sbi_context_mgmt_init(struct sbi_scratch *scratch);
 

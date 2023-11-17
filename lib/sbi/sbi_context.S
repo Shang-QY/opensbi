@@ -8,7 +8,7 @@
 #include <sbi/sbi_trap.h>
 #include <sbi/sbi_scratch.h>
 	.align 3
-	.global cpu_smode_context_enter
+	.global cpu_lowlevel_context_enter
 
 	/* ---------------------------------------------------------------------
 	 * This function is called with M-mode runtime stack. Here we stash our
@@ -18,7 +18,7 @@
 	 *  runtime context is to be saved.
 	 * ---------------------------------------------------------------------
 	 */
-cpu_smode_context_enter:
+cpu_lowlevel_context_enter:
 	/* Make space for the registers that we're going to save */
 	REG_S   sp, 0(a1)
 	add	sp, sp, -(SBI_TRAP_REGS_SIZE)
@@ -69,7 +69,7 @@ cpu_smode_context_enter:
 	call	_trap_exit
 
 	.align 3
-	.global cpu_smode_context_exit
+	.global cpu_lowlevel_context_exit
 	/* ---------------------------------------------------------------------
 	 * This function is called with 'x0' pointing to a C runtime context
 	 * saved in context_enter_helper().
@@ -79,7 +79,7 @@ cpu_smode_context_enter:
 	 * the second parameter 'x1' is passed as a return value to the caller.
 	 * ---------------------------------------------------------------------
 	 */
-cpu_smode_context_exit:
+cpu_lowlevel_context_exit:
 	/* Restore the previous stack */
 	add	sp, a0, 0
 
