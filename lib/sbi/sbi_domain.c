@@ -9,6 +9,7 @@
 
 #include <sbi/riscv_asm.h>
 #include <sbi/sbi_console.h>
+#include <sbi/sbi_hart.h>
 #include <sbi/sbi_domain.h>
 #include <sbi/sbi_hartmask.h>
 #include <sbi/sbi_heap.h>
@@ -60,6 +61,14 @@ static void update_hartindex_to_domain(u32 hartindex, struct sbi_domain *dom)
 		return;
 
 	sbi_scratch_write_type(scratch, void *, domain_hart_ptr_offset, dom);
+}
+
+static struct sbi_context *sbi_domain_get_context_ptr(u32 hartid, const struct sbi_domain *dom)
+{
+	if (dom)
+		return dom->hartidx_to_context_table[sbi_hartid_to_hartindex(hartid)];
+
+	return NULL;
 }
 
 bool sbi_domain_is_assigned_hart(const struct sbi_domain *dom, u32 hartid)
@@ -675,7 +684,7 @@ int sbi_domain_root_add_memrange(unsigned long addr, unsigned long size,
 int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 {
 	int rc;
-	u32 i, dhart;
+	u32 i, j, dhart;
 	struct sbi_domain *dom;
 	const struct sbi_platform *plat = sbi_platform_ptr(scratch);
 
@@ -691,6 +700,10 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid)
 	sbi_domain_for_each(i, dom) {
 		/* Domain boot HART index */
 		dhart = sbi_hartid_to_hartindex(dom->boot_hartid);
+
+		sbi_hartmask_for_each_hartindex(j, dom->possible_harts) {
+			dom->hartidx_to_context_table[j] = sbi_zalloc(sizeof(struct sbi_context));
+		}
 
 		/* Ignore of boot HART is off limits */
 		if (!sbi_hartindex_valid(dhart))
@@ -832,4 +845,59 @@ fail_free_root_memregs:
 fail_free_domain_hart_ptr_offset:
 	sbi_scratch_free_offset(domain_hart_ptr_offset);
 	return rc;
+}
+
+void sbi_domain_switch_context(struct sbi_domain *tdom)
+{
+	struct sbi_trap_regs *trap_regs;
+	u32 hartindex = sbi_hartid_to_hartindex(current_hartid());
+	struct sbi_context *curr_ctx = sbi_domain_get_context_ptr(hartindex, sbi_domain_thishart_ptr());
+	struct sbi_context *next_ctx = sbi_domain_get_context_ptr(hartindex, tdom);
+	struct sbi_scratch *scratch = sbi_scratch_thishart_ptr();
+	unsigned int pmp_count	    = sbi_hart_pmp_count(scratch);
+
+	/* Assign current hart to target domain */
+	sbi_hartmask_clear_hartindex(hartindex, &sbi_domain_thishart_ptr()->assigned_harts);
+	update_hartindex_to_domain(hartindex, tdom);
+	sbi_hartmask_set_hartindex(hartindex, &tdom->assigned_harts);
+
+	/* PMP re-configuration */
+	for (int i = 0; i < pmp_count; i++) {
+		pmp_disable(i);
+	}
+	sbi_hart_pmp_configure(scratch);
+
+	/* Save current CSR context and restore target domain's CSR context */
+	curr_ctx->csr_stvec	  = csr_read_set(CSR_STVEC, next_ctx->csr_stvec);
+	curr_ctx->csr_sscratch = csr_read_set(CSR_SSCRATCH, next_ctx->csr_sscratch);
+	curr_ctx->csr_sie	  = csr_read_set(CSR_SIE, next_ctx->csr_sie);
+	curr_ctx->csr_sip	  = csr_read_set(CSR_SIP, next_ctx->csr_sip);
+	curr_ctx->csr_satp	  = csr_read_set(CSR_SATP, next_ctx->csr_satp);
+
+	/* Save current trap state and restore target domain's trap state */
+	trap_regs = (struct sbi_trap_regs *)(csr_read(CSR_MSCRATCH) -
+						SBI_TRAP_REGS_SIZE);
+	sbi_memcpy(&curr_ctx->regs, trap_regs, sizeof(*trap_regs));
+	sbi_memcpy(trap_regs, &next_ctx->regs, sizeof(*trap_regs));
+	curr_ctx->ctx_initalized = true;
+	if (!next_ctx->ctx_initalized) {
+		next_ctx->ctx_initalized = true;
+		int i = 0;
+		sbi_hartmask_for_each_hartindex(i, tdom->possible_harts) {
+			if (!sbi_hartmask_test_hartindex(i, &tdom->assigned_harts)) {
+				sbi_hsm_hart_stop(scratch, true);
+			}
+		}
+
+		if (current_hartid() == tdom->boot_hartid) {
+			sbi_hart_switch_mode(tdom->boot_hartid, tdom->next_arg1, tdom->next_addr,
+			     tdom->next_mode, false);
+			__builtin_unreachable();
+		} else {
+			sbi_hsm_hart_start(scratch, NULL, tdom->boot_hartid,
+				   tdom->next_addr, tdom->next_mode,
+				   tdom->next_arg1);
+			sbi_hsm_hart_stop(scratch, true);
+		}
+	} 
 }

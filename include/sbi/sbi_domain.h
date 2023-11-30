@@ -12,6 +12,7 @@
 
 #include <sbi/sbi_types.h>
 #include <sbi/sbi_hartmask.h>
+#include <sbi/sbi_trap.h>
 
 struct sbi_scratch;
 
@@ -156,6 +157,19 @@ struct sbi_domain_memregion {
 	unsigned long flags;
 };
 
+/** Representation of low level hart context */
+struct sbi_context {
+	/** General registers, mepc and mstatus for trap state */
+	struct sbi_trap_regs regs;
+	/** S-mode CSR registers */
+	uint64_t csr_stvec;
+	uint64_t csr_sscratch;
+	uint64_t csr_sie;
+	uint64_t csr_sip;
+	uint64_t csr_satp;
+	bool ctx_initalized;
+};
+
 /** Maximum number of domains */
 #define SBI_DOMAIN_MAX_INDEX			32
 
@@ -176,6 +190,8 @@ struct sbi_domain {
 	char name[64];
 	/** Possible HARTs in this domain */
 	const struct sbi_hartmask *possible_harts;
+	/** Contexts for possible HARTs indexed by hartindex */
+	struct sbi_context *hartidx_to_context_table[SBI_HARTMASK_MAX_BITS];
 	/** Array of memory regions terminated by a region with order zero */
 	struct sbi_domain_memregion *regions;
 	/** HART id of the HART booting this domain */
@@ -324,5 +340,11 @@ int sbi_domain_finalize(struct sbi_scratch *scratch, u32 cold_hartid);
 
 /** Initialize domains */
 int sbi_domain_init(struct sbi_scratch *scratch, u32 cold_hartid);
+
+/**
+ * Synchronous entry into specific domain context
+ * @param domain_index the domain ID
+ */
+void sbi_domain_switch_context(struct sbi_domain *dom);
 
 #endif
