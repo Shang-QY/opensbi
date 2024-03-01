@@ -40,8 +40,9 @@ static int sbi_ecall_test_secure_exit(void)
 }
 
 static int sbi_ecall_test_handler(unsigned long extid, unsigned long funcid,
-				  struct sbi_trap_regs *regs,
-				  struct sbi_ecall_return *out)
+				  const struct sbi_trap_regs *regs,
+				  unsigned long *out_val,
+				  struct sbi_trap_info *out_trap)
 {
 	int ret = 0;
 
